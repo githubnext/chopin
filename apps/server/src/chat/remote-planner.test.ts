@@ -32,7 +32,7 @@ import { sessionContextOf } from "./session-context";
 import { plannerCommands } from "../harness/harnesses";
 import { attachedLink } from "../harness/remote/registry";
 import * as Question from "@chopin/question";
-import { answerTurns } from "../questions/answer-turns";
+import { answerTurns, plannerToActOn } from "../questions/answer-turns";
 import * as Questions from "../questions/service";
 import * as Store from "../questions/store";
 import { member } from "../questions/text-response.test-fixtures";
@@ -638,10 +638,16 @@ test("with its link connected, an attached Planner's open question stays open fo
 	await clock.pass(2 * HOUR);
 	expect(context.plan.records.get(id)?.status).toBe("open");
 	expect(context.chat.retained).toBeDefined();
-	// The one bound is the owner: signing out ends what the Planner acted for them on.
+	// The one bound is the owner: signing out releases the retained session and detaches its
+	// waiter while leaving the open Decision in the document for durable handoff.
 	await live.signOut("member");
-	await until(() => context.plan.records.get(id)?.status === "cancelled");
 	await until(() => context.chat.retained === undefined);
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	expect(Store.get(context.plan.questions, id)?.awaited).toBeUndefined();
+	expect(plannerToActOn(
+		context.plan.records.get(id)!,
+		Store.get(context.plan.questions, id)!,
+	)).toBe(true);
 });
 
 test("a question an attached Planner asks while its turn runs keeps the turn going through its owner's credential renewals, and the reply finishes once it is answered", async () => {
@@ -823,7 +829,7 @@ test("a dropped link's grace period only leases ownership: a Stop that ends a qu
 	expect(await down.owner()).toBe(down.logins.get("rival"));
 });
 
-test("the same drop of an attached Planner that did not ask for resumable sessions ends its question as before", async () => {
+test("a drop of an attached Planner that did not ask for resumable sessions ends its session and detaches its waiter while keeping the Decision open", async () => {
 	let room = await remoteRoom();
 	let { context, server } = room;
 	let script = scriptedPlanner();
@@ -853,7 +859,13 @@ test("the same drop of an attached Planner that did not ask for resumable sessio
 	expect(await client.resumption).toBeUndefined();
 	for (let attempt = 0; attempt < 100 && context.chat.retained; attempt++) await Bun.sleep(5);
 	expect(context.chat.retained).toBeUndefined();
-	expect([...context.plan.records.values()].map(record => record.status)).toEqual(["cancelled"]);
+	let [id] = [...context.plan.records.keys()];
+	expect(context.plan.records.get(id!)?.status).toBe("open");
+	expect(Store.get(context.plan.questions, id!)?.awaited).toBeUndefined();
+	expect(plannerToActOn(
+		context.plan.records.get(id!)!,
+		Store.get(context.plan.questions, id!)!,
+	)).toBe(true);
 });
 
 test("a Stop pressed while the attached Planner's link is down withdraws a question it only waits on, as when connected", async () => {
@@ -901,18 +913,23 @@ test("an answer given while the attached Planner's link is down is held for its 
 	expect(context.plan.records.get(id)?.status).toBe("answered");
 });
 
-test("a question its client withdraws while the Planner's link is down ends its wait at once and is withdrawn in Chopin when the client resumes", async () => {
+test("a question omitted from resume after a drop detaches its waiter while keeping the Decision open in Chopin", async () => {
 	let down = await resumablePlanner({ ask: true, withdrawable: true });
 	let { context } = down;
 	let id = [...context.plan.records.keys()][0]!;
 	await down.drop();
-	// The link is down, so the server cannot hear the withdrawal yet; the caller's wait is over.
+	// The link is down, so the client stops waiting locally and omits the request from resume.
 	down.withdraw();
 	expect(await down.asked()).toMatchObject({ status: "cancelled" });
 	expect(context.plan.records.get(id)?.status).toBe("open");
 
 	await down.reconnect();
-	await until(() => context.plan.records.get(id)?.status === "cancelled");
+	await until(() => Store.get(context.plan.questions, id)?.awaited === undefined);
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	expect(plannerToActOn(
+		context.plan.records.get(id)!,
+		Store.get(context.plan.questions, id)!,
+	)).toBe(true);
 	expect(context.plan.records.size).toBe(1);
 });
 
@@ -2037,3 +2054,151 @@ for (let steers of [true, false]) {
 		},
 	);
 }
+
+test("an unplanned disconnect mid-turn with no open input-request classifies the turn as dropped rather than error", async () => {
+	let room = await remoteRoom();
+	let { context, server } = room;
+	let turning = Promise.withResolvers<void>();
+	let client = await connectAgent({
+		url: server.url,
+		token: MEMBER_TOKEN,
+		document: room.channel.id,
+		resumable: true,
+		handlers: {
+			async turn() {
+				turning.resolve();
+				await new Promise(() => {});
+			},
+		},
+	});
+	cleanups.push(() => client.detach());
+	expect(await room.send("@chopin outline the plan")).toMatchObject({ kind: "chat:send" });
+	await turning.promise;
+	for (let socket of server.sockets) socket.close(1001, "network failed");
+	await context.chat.running;
+	let failed = context.chat.entries.filter(entry => entry.turnFailure);
+	expect(failed).toHaveLength(1);
+	expect(failed[0]!.turnFailure).toMatchObject({ kind: "dropped" });
+});
+
+test("a fast reconnect that clears suspended before turn catch runs still classifies the interrupted turn as dropped", async () => {
+	let down = await resumablePlanner({ ask: true });
+	let { context, server } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	let turning = Promise.withResolvers<void>();
+	let streamRelease = Promise.withResolvers<void>();
+	let origOpen = context.openPlannerSession!;
+	let retained = context.chat.retained!;
+	let origStream = retained.session.stream.bind(retained.session);
+	retained.session.stream = async (...args) => {
+		let res = await origStream(...args);
+		let inner = res.fullStream;
+		return {
+			...res,
+			fullStream: (async function*() {
+				try {
+					for await (let part of inner) yield part;
+				} finally {
+					// Hold stream teardown until after the client has reconnected and cleared suspended.
+					await streamRelease.promise;
+				}
+			})() as never,
+		};
+	};
+	context.openPlannerSession = origOpen;
+	(down.handlers as any).turn = async () => {
+		turning.resolve();
+		await new Promise(() => {});
+	};
+	let invoked = Chat.invoke(context, RIVAL, "Keep going");
+	await turning.promise;
+	await down.drop();
+	// Client reconnects and resumes (clearing suspended = false) BEFORE turn catch executes.
+	await down.reconnect();
+	await until(() => server.attachments.status(down.channel.id).state === "attached");
+	expect(retained.session.suspended?.()).toBe(false);
+	streamRelease.resolve();
+	await invoked;
+	await context.chat.running;
+	let failed = context.chat.entries.filter(entry => entry.turnFailure);
+	expect(failed).toHaveLength(1);
+	expect(failed[0]!.turnFailure).toMatchObject({ kind: "dropped" });
+	expect(context.plan.records.get(id)?.status).toBe("open");
+});
+
+test("a retained session whose owner credential rotated to a new login and generation while suspended rebinds cleanly for the same owner and repository", async () => {
+	let down = await resumablePlanner({ ask: true });
+	let { context } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	let retained = context.chat.retained!;
+	let originalSession = retained.session;
+	let originalBinding = retained.binding;
+	await down.drop();
+
+	// Simulate credential expiry while suspended AND a freshly minted owner session/generation
+	// for the same user + repository when the machine reconnects.
+	let expired = new AbortController();
+	let previous = {
+		...originalBinding,
+		signal: expired.signal,
+		release: () => expired.abort(new Error("released")),
+	};
+	retained.binding = previous;
+	expired.abort(new Error("credential-expired"));
+
+	let rotatedController = new AbortController();
+	let rotatedBinding = {
+		...originalBinding,
+		ownerSessionId: "delegated-login-rotated",
+		ownerGeneration: originalBinding.ownerGeneration + 1,
+		credentialRevision: originalBinding.credentialRevision + 1,
+		ownerUserId: originalBinding.ownerUserId,
+		signal: rotatedController.signal,
+		revalidate: async () => true,
+		release: () => rotatedController.abort(new Error("released")),
+	};
+	context.activeOwner = async () => rotatedBinding;
+
+	await down.reconnect();
+	expect(await Chat.invoke(context, RIVAL, "Continue after rebind")).toBeUndefined();
+	await context.chat.running;
+	expect(context.chat.retained?.session).toBe(originalSession);
+	expect(context.chat.retained?.binding).toBe(rotatedBinding);
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	await answerChoice(context, id, 0);
+	expect(await down.asked()).toMatchObject({ status: "answered", value: true });
+});
+
+test("when a retained session cannot rebind because another owner took over, releasing it detaches the waiter without withdrawing open Decisions", async () => {
+	let down = await resumablePlanner({ ask: true });
+	let { context } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	let retained = context.chat.retained!;
+	let originalBinding = retained.binding;
+	await down.drop();
+
+	let expired = new AbortController();
+	retained.binding = { ...originalBinding, signal: expired.signal };
+	expired.abort(new Error("credential-expired"));
+
+	let otherController = new AbortController();
+	context.activeOwner = async () => ({
+		...originalBinding,
+		ownerSessionId: "other-user-login",
+		ownerGeneration: originalBinding.ownerGeneration + 1,
+		ownerUserId: "U_other",
+		signal: otherController.signal,
+		revalidate: async () => true,
+		release: () => otherController.abort(new Error("released")),
+	});
+
+	await down.reconnect();
+	await retained.release();
+	expect(context.chat.retained).toBeUndefined();
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	expect(Store.get(context.plan.questions, id)?.awaited).toBeUndefined();
+	expect(plannerToActOn(
+		context.plan.records.get(id)!,
+		Store.get(context.plan.questions, id)!,
+	)).toBe(true);
+});

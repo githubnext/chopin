@@ -177,6 +177,19 @@ export function rejoin(questions: Questions, id: string): Promise<Ended> | undef
 	});
 }
 
+/**
+ * Detaches the in-memory waiter from an open questionnaire without removing or cancelling it.
+ *
+ * The card stays open in the document with `awaited` cleared so a later human Save hands its
+ * answer to the Planner through `answerTurns`.
+ */
+export function unawait(questions: Questions, id: string): void {
+	let entry = questions.open.get(id);
+	if (!entry) return;
+	delete entry.awaited;
+	delete entry.settle;
+}
+
 export function get(questions: Questions, id: string): Open | undefined {
 	return questions.open.get(id);
 }

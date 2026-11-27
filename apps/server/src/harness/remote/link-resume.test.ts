@@ -12,6 +12,8 @@ import {
 } from "../../testing/agent-link";
 import { createHumanInput } from "../atomic/human-input";
 import { createRemoteAdapter } from "./adapter";
+import { plannerToActOn } from "../../questions/answer-turns";
+import * as Store from "../../questions/store";
 import { testLease } from "../../storage/contract-support";
 
 import type { RemotePlanner } from "./registry";
@@ -67,6 +69,8 @@ async function held(
 	raw.send({ type: "attach", version: 1, document: channel.id });
 	let attached = await raw.next("attached");
 	let planner: RemotePlanner = { channelId: channel.id, isolated: false };
+	let unsent: string[] = [];
+	planner.unsentDecisions = decisions => unsent.push(...decisions);
 	let heldInputs = { open: 0, released: 0 };
 	planner.holdInput = () => {
 		heldInputs.open++;
@@ -104,6 +108,7 @@ async function held(
 		raw,
 		attached,
 		planner,
+		unsent,
 		sessionId,
 		card: card!,
 		status,
@@ -271,9 +276,15 @@ describe("a resumable link that drops", () => {
 
 		let plain = await h.reattach(MEMBER_TOKEN, false);
 		expect((await plain.next("attached")).features).toBeUndefined();
-		// It cannot claim them, so what the earlier link held ends as it always did.
-		await until(() => h.status() === "cancelled");
-		expect(h.planner.suspended).toBe(false);
+		// It cannot claim the session, so the waiter detaches while the open Decision stays
+		// in the document for durable handoff via answerTurns.
+		await until(() => h.planner.suspended === false);
+		expect(h.status()).toBe("open");
+		expect(Store.get(h.f.plan.questions, h.card.id)?.awaited).toBeUndefined();
+		expect(plannerToActOn(
+			h.f.plan.records.get(h.card.id)!,
+			Store.get(h.f.plan.questions, h.card.id)!,
+		)).toBe(true);
 	});
 
 	it("keeps nothing once its question is answered and the answer acknowledged: the drop runs the grace period", async () => {
@@ -290,14 +301,19 @@ describe("a resumable link that drops", () => {
 		expect(h.planner.suspended).not.toBe(true);
 	});
 
-	it("ends what the client does not claim, and what it no longer waits on", async () => {
+	it("detaches waiters for sessions and requests the client omits from resume while keeping their Decisions open", async () => {
 		let omitted = await held();
 		await omitted.drop();
 		let first = await omitted.reattach();
 		await first.next("attached");
 		first.send({ type: "resume", sessions: [] });
 		expect(await first.next("resumed")).toEqual({ type: "resumed", sessions: [] });
-		await until(() => omitted.status() === "cancelled");
+		await until(() => Store.get(omitted.f.plan.questions, omitted.card.id)?.awaited === undefined);
+		expect(omitted.status()).toBe("open");
+		expect(plannerToActOn(
+			omitted.f.plan.records.get(omitted.card.id)!,
+			Store.get(omitted.f.plan.questions, omitted.card.id)!,
+		)).toBe(true);
 
 		let gaveUp = await held();
 		await gaveUp.drop();
@@ -308,7 +324,13 @@ describe("a resumable link that drops", () => {
 			type: "resumed",
 			sessions: [{ session: gaveUp.sessionId, requests: [] }],
 		});
-		await until(() => gaveUp.status() === "cancelled");
+		await until(() => Store.get(gaveUp.f.plan.questions, gaveUp.card.id)?.awaited === undefined);
+		expect(gaveUp.status()).toBe("open");
+		expect(plannerToActOn(
+			gaveUp.f.plan.records.get(gaveUp.card.id)!,
+			Store.get(gaveUp.f.plan.questions, gaveUp.card.id)!,
+		)).toBe(true);
+		expect(second.messages.filter(message => message.type === "input-result")).toEqual([]);
 	});
 
 	it("keeps an answer given before the server noticed the drop, and gives it to the client that returns", async () => {
@@ -604,16 +626,24 @@ describe("a resumable link that drops", () => {
 			.toEqual([]);
 	});
 
-	it("is ended at once by a sign-out, a Planner reset, or the client's own detach", async () => {
+	it("ends the hold at once on sign-out, a Planner reset, or the client's own detach while keeping Decisions open", async () => {
 		for (let ending of ["sign-out", "reset", "detach"] as const) {
 			let h = await held();
 			if (ending === "detach") h.raw.send({ type: "detach" });
 			else await h.drop();
 			if (ending === "sign-out") await h.signOut("member");
 			if (ending === "reset") h.server.attachments.ownerReset(h.channel.id);
-			await until(() => h.status() === "cancelled", 1_500).catch(() => {
-				throw new Error(`${ending}: the question stayed ${h.status()}`);
+			await until(
+				() => Store.get(h.f.plan.questions, h.card.id)?.awaited === undefined,
+				1_500,
+			).catch(() => {
+				throw new Error(`${ending}: the question waiter stayed attached`);
 			});
+			expect(h.status(), ending).toBe("open");
+			expect(
+				plannerToActOn(h.f.plan.records.get(h.card.id)!, Store.get(h.f.plan.questions, h.card.id)!),
+				ending,
+			).toBe(true);
 			let next = await h.reattach();
 			if (ending === "sign-out") {
 				expect(await next.next("refused")).toMatchObject({ code: "sign-in-required" });
@@ -623,5 +653,58 @@ describe("a resumable link that drops", () => {
 			next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
 			expect(await next.next("resumed")).toEqual({ type: "resumed", sessions: [] });
 		}
+	});
+
+	it("hands an answered normal input-request to unsentDecisions once when the client abandons after a drop", async () => {
+		let h = await held();
+		await h.drop();
+		await h.f.answer(h.card.id, [0]);
+		expect(h.status()).toBe("answered");
+		expect(h.unsent).toEqual([]);
+
+		let next = await h.reattach();
+		await next.next("attached");
+		next.send({ type: "resume", sessions: [] });
+		expect(await next.next("resumed")).toEqual({ type: "resumed", sessions: [] });
+		expect(h.unsent).toEqual([h.card.id]);
+	});
+
+	it("preserves unsentDecisions through #awaitAck and #resume when an unacknowledged answer is later abandoned", async () => {
+		let h = await held();
+		await h.f.answer(h.card.id, [0]);
+		expect(await h.raw.next("input-result")).toMatchObject({
+			request: "ask-1",
+			status: "answered",
+		});
+		// Drop without sending input-received, then resume and receive input-result a second time.
+		await h.drop();
+		let second = await h.reattach();
+		await second.next("attached");
+		second.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
+		await second.next("resumed");
+		expect(await second.next("input-result")).toMatchObject({
+			request: "ask-1",
+			status: "answered",
+		});
+		expect(h.unsent).toEqual([]);
+
+		// Drop again without input-received, then abandon via a non-resumable client.
+		second.socket.close();
+		await second.closed;
+		await until(() => h.server.links.length === 0);
+		let third = await h.reattach(MEMBER_TOKEN, false);
+		await third.next("attached");
+		expect(h.unsent).toEqual([h.card.id]);
+	});
+
+	it("never fires unsentDecisions once the client acknowledges input-received", async () => {
+		let h = await held();
+		await h.f.answer(h.card.id, [0]);
+		await h.raw.next("input-result");
+		h.raw.send({ type: "input-received", request: "ask-1" });
+		await until(() => h.heldInputs.open === 0);
+		h.raw.send({ type: "detach" });
+		await h.raw.closed;
+		expect(h.unsent).toEqual([]);
 	});
 });

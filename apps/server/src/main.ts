@@ -594,6 +594,18 @@ function answerDecision(channelId: string, id: string, generation: number): void
 }
 
 /**
+ * Hands answered Planner decisions whose asking client could not receive the answer (dropped,
+ * detached, or abandoned before acknowledgement) to `decisionAnswers` for durable turn delivery.
+ */
+function unsentPlannerDecisions(plan: Service.Plan, decisions: string[]): void {
+	for (let id of decisions) {
+		let record = plan.records.get(id);
+		if (record?.status !== "answered" || record.origin !== "planner") continue;
+		answerDecision(plan.id, id, decisionGeneration(record));
+	}
+}
+
+/**
  * What a remote Planner's rebuilt hold needs from a document that has opened, to wait again for
  * the answers to the questions its client left open before a restart: it asks them of the
  * members again, and an answer its client can never be given becomes a turn of its own.
@@ -609,13 +621,7 @@ function plannerQuestions(plan: Service.Plan, server: Server<SocketData>): Rejoi
 				{ id: plan.id, plan, server, anchors: () => Service.anchors(plan, server, plan.id) },
 				report,
 			),
-		unsent: decisions => {
-			for (let id of decisions) {
-				let record = plan.records.get(id);
-				if (record?.status !== "answered" || record.origin !== "planner") continue;
-				answerDecision(plan.id, id, decisionGeneration(record));
-			}
-		},
+		unsent: decisions => unsentPlannerDecisions(plan, decisions),
 	};
 }
 
@@ -938,6 +944,7 @@ function conversation(
 		readsImages: () => turnReadsImages(modelChoices, room.id),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => ownerAvailable(room.id),
+		unsentDecisions: decisions => unsentPlannerDecisions(opened, decisions),
 		jobs: config.backgroundJobs ? jobService : undefined,
 		references: referenceService,
 		investigations: experiments

@@ -1101,12 +1101,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!runsPlanners(connection)) return [];
 		await readChoices();
 		let documents: Array<PlannerAssignment & { repositoryId: string }> = [];
-		let add = async (channel: ChannelRecord) =>
+		let seen = new Set<string>();
+		let add = async (channel: ChannelRecord) => {
+			if (seen.has(channel.id)) return;
+			seen.add(channel.id);
 			documents.push({
 				id: channel.id,
 				url: new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href,
 				repositoryId: channel.repositoryId,
 			});
+		};
 		for (let { documentId, owner } of connections.choosing(connection.machineId)) {
 			let channel = await auth.storage.channels.get(documentId);
 			if (!channel || channel.archivedAt || !serves(connection, channel.repositoryId)) continue;
@@ -1134,6 +1138,15 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					|| (holder.attached || holder.disconnected)
 						&& holder.machineId !== connection.machineId)
 			) continue;
+			await add(channel);
+		}
+		for (let documentId of options.attachments?.()?.parkedForMachine(connection.machineId) ?? []) {
+			if (seen.has(documentId)) continue;
+			let channel = await auth.storage.channels.get(documentId);
+			if (!channel || channel.archivedAt || !serves(connection, channel.repositoryId)) continue;
+			let holder = options.attachments?.()?.holding(documentId);
+			if (holder && holder.userId !== connection.owner) continue;
+			if (holder?.disconnected && holder.machineId !== connection.machineId) continue;
 			await add(channel);
 		}
 		let told = new Map(dispatched.get(connection.machineId));

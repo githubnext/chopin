@@ -12,6 +12,7 @@ import {
 import { AgentRefused, connectAgent } from "@chopin/agent-link/client";
 
 import { GitHubError } from "../../github/client";
+import { plannerToActOn } from "../../questions/answer-turns";
 import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Edit from "../../plan/edit";
@@ -2314,7 +2315,7 @@ describe("Agent connection questions", () => {
 		}
 	});
 
-	it("withdraws a question open past half an hour when the link closes", async () => {
+	it("detaches the waiter and keeps a question open past half an hour when the link detaches", async () => {
 		let { f, client, sessionId } = await questions();
 		let clock = laterTimers();
 		try {
@@ -2324,15 +2325,19 @@ describe("Agent connection questions", () => {
 			await clock.pass(31 * 60 * 1_000);
 			expect(f.plan.records.get(card!.id)?.status).toBe("open");
 			await client.detach();
-			await until(() => Store.outstanding(f.plan.questions).length === 0, 2_000);
-			expect(f.plan.records.get(card!.id)).toMatchObject({ status: "cancelled" });
-			expect(Plan.source(f.plan)).not.toContain(card!.id);
+			await until(() => Store.get(f.plan.questions, card!.id)?.awaited === undefined, 2_000);
+			expect(f.plan.records.get(card!.id)).toMatchObject({ status: "open" });
+			expect(Plan.source(f.plan)).toContain(card!.id);
+			expect(plannerToActOn(
+				f.plan.records.get(card!.id)!,
+				Store.get(f.plan.questions, card!.id)!,
+			)).toBe(true);
 		} finally {
 			clock.restore();
 		}
 	});
 
-	it("withdraws the cards when the client cancels or the session ends", async () => {
+	it("withdraws the card on explicit client cancel, and detaches the waiter when the session ends", async () => {
 		let { f, client, sessionId, session } = await questions();
 		let controller = new AbortController();
 		let asked = client.ask(sessionId, { method: "questionnaire", params }, {
@@ -2346,8 +2351,12 @@ describe("Agent connection questions", () => {
 		let [second] = await f.cards(1);
 		await session.doDestroy();
 		expect(await pending).toMatchObject({ status: "cancelled" });
-		expect(f.plan.records.get(second!.id)).toMatchObject({ status: "cancelled" });
-		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+		expect(f.plan.records.get(second!.id)).toMatchObject({ status: "open" });
+		expect(Store.get(f.plan.questions, second!.id)?.awaited).toBeUndefined();
+		expect(plannerToActOn(
+			f.plan.records.get(second!.id)!,
+			Store.get(f.plan.questions, second!.id)!,
+		)).toBe(true);
 	});
 
 	it("gives an isolated session no Decisions", async () => {

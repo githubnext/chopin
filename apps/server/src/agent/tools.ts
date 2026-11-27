@@ -218,6 +218,11 @@ export type DocumentRoom = {
 	turnSignal?: () => AbortSignal | undefined;
 	/** Hears the ids of the Decision cards this room's Planner creates; set in a Chat thread. */
 	decisionsAsked?: (ids: string[]) => void;
+	/**
+	 * Decisions answered whose answer could not be delivered directly to the asking client.
+	 * Hands them to the Planner as a turn through `answerTurns`.
+	 */
+	unsentDecisions?: (decisions: string[]) => void;
 	/** The same server-owned prose check used before publishing ordinary Planner replies. */
 	checkReply?: (text: string, signal?: AbortSignal) => Promise<boolean>;
 	/** This root's children; absent in a child room and in tests that do not need them. */

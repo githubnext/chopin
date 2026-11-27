@@ -157,7 +157,7 @@ export async function reopen(
 					open: new Map(plan.questions.open),
 					closed: new Map(plan.questions.closed),
 				};
-				Store.reopen(questions, msg.id, record.definition, msg.id);
+				Store.reopen(questions, msg.id, record.definition, msg.id, record.lastRevision ?? 0);
 				await Service.publishStaged(plan, server, roomId, {
 					...candidate,
 					questions,

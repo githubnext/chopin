@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { ToolBoundaryError as AtomicToolBoundaryError } from "../harness/atomic/adapter";
-import { ToolBoundaryError } from "../harness/remote/link";
+import { PlannerDisconnectedError, ToolBoundaryError } from "../harness/remote/link";
 import { PlannerReplyError } from "./reply-policy";
 import { turnFailureOf } from "./turn-failure";
 
@@ -104,6 +104,28 @@ test("a boundary stop on a turn whose connection dropped is still dropped", () =
 			...BASE,
 			suspended: true,
 			error: new ToolBoundaryError("Chopin's tool boundary failure: bash"),
+		}).kind,
+	).toBe("dropped");
+});
+
+test("an unplanned disconnect error classifies as dropped even when suspended is false", () => {
+	expect(
+		turnFailureOf({
+			...BASE,
+			suspended: false,
+			error: new PlannerDisconnectedError(),
+		}),
+	).toEqual({
+		kind: "dropped",
+		request: "req-1",
+		focus: "child-1",
+	});
+	expect(
+		turnFailureOf({
+			...BASE,
+			suspended: false,
+			interruption: "Chopin is restarting.",
+			error: new PlannerDisconnectedError(),
 		}).kind,
 	).toBe("dropped");
 });

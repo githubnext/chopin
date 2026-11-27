@@ -3,6 +3,7 @@ import { $nodesOfType } from "lexical";
 import { limits, QuestionnaireNode, ulid } from "@chopin/dialect";
 import * as QuestionModel from "@chopin/question";
 import * as Questions from "../../questions/service";
+import { plannerToActOn } from "../../questions/answer-turns";
 import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Room from "../../plan/room";
@@ -391,6 +392,36 @@ test("a session counts a request as open from its call until a member answers it
 	expect(await questionnaire).toEqual({ answers: [], cancelled: true });
 	expect(pending.open()).toBe(0);
 	expect(ended).toBe(2);
+});
+
+test("aborting with DETACH_WAITER detaches the waiter and clears awaited without removing open cards", async () => {
+	let f = await fixture();
+	let pending = new PendingInputs();
+	let input = createHumanInput(f.room, undefined, pending);
+	let controller = new AbortController();
+	let answeredOnDetach: string[] = [];
+	let response = input.questionnaire(params, {
+		...f.options,
+		signal: controller.signal,
+		answered: ids => answeredOnDetach.push(...ids),
+	});
+	let cards = await f.cards(3);
+	expect(pending.open()).toBe(1);
+	// Answer the first card before detaching, leaving the other two open.
+	await f.answer(cards[0]!.id, [0]);
+	controller.abort(Questions.DETACH_WAITER);
+	expect(await response).toEqual({ answers: [], cancelled: true });
+	expect(pending.open()).toBe(0);
+	expect(answeredOnDetach).toEqual([cards[0]!.id]);
+	expect(f.plan.records.get(cards[0]!.id)?.status).toBe("answered");
+	for (let card of cards.slice(1)) {
+		expect(f.plan.records.get(card.id)?.status).toBe("open");
+		let entry = Store.get(f.plan.questions, card.id)!;
+		expect(entry.awaited).toBeUndefined();
+		expect(entry.settle).toBeUndefined();
+		expect(plannerToActOn(f.plan.records.get(card.id)!, entry)).toBe(true);
+		expect(Plan.source(f.plan)).toContain(card.id);
+	}
 });
 
 /** A document of a title and two sections, whose first section is block 1. */

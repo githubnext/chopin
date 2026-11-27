@@ -128,6 +128,7 @@ export async function submit(
 					...(marks ? { marks } : {}),
 					editors: [...new Set([...record.editors, ...claimed.claim.entry.editors])],
 					anchors: Anchors.answer(record),
+					lastRevision: claimed.claim.entry.revision,
 				};
 				records.set(msg.id, answered);
 				let intent = settleIntent(answered);

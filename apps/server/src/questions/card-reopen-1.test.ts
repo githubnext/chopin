@@ -30,7 +30,7 @@ test("reopen keeps identity, moves the decision to history, and publishes metada
 	expect(record.answers).toBeUndefined();
 	expect(record.choices).toBeUndefined();
 	expect(Store.get(context.plan.questions, context.id)?.settle).toBeUndefined();
-	expect(Store.get(context.plan.questions, context.id)?.revision).toBe(0);
+	expect(Store.get(context.plan.questions, context.id)?.revision).toBe(1);
 	let projected = room.project(context.plan.document);
 	expect(projected).toContain('status="reopened"');
 	expect(projected).toContain(
@@ -208,4 +208,73 @@ test("an older option summary without saved IDs stays text even when its label m
 	expect(room.project(context.plan.document)).toContain(
 		`<Previous value="${question.options[0]!.label}"`,
 	);
+});
+
+test("reopen advances revision monotonically across restarts and rejects pre-reopen submits as stale", async () => {
+	let context = await decided();
+	// First reopen advances revision past the settled card's pre-reopen revision 0.
+	await reopen(context);
+	let reopenedRev = Store.get(context.plan.questions, context.id)!.revision;
+	expect(reopenedRev).toBe(1);
+	let stale = member("cy");
+	await Questions.submit(context.plan, context.server, "test", stale.ws, {
+		kind: "question:submit",
+		ts: 0,
+		rid: "stale-submit",
+		id: context.id,
+		revision: 0,
+	});
+	expect(stale.frames.at(-1)).toMatchObject({
+		kind: "question:submit",
+		rid: "stale-submit",
+		id: context.id,
+		ok: false,
+		reason: "stale",
+		current: 1,
+	});
+
+	// Edit and submit at revision 2, then clear in-memory closed tombstones (as a restart does).
+	let entry = Store.get(context.plan.questions, context.id)!;
+	let question = entry.definition.questions[0]!;
+	let fork = entry.model.fork() as import("@chopin/question").Model;
+	fork.api.val([question.id, "choice"]).set(question.options[0]!.id);
+	let editor = member("ben");
+	await Questions.edit(context.plan, editor.ws, {
+		kind: "question:edit",
+		ts: 0,
+		rid: "edit-1",
+		id: context.id,
+		patch: [...fork.api.flush().toBinary()],
+	});
+	let submitRev = Store.get(context.plan.questions, context.id)!.revision;
+	expect(submitRev).toBe(2);
+	await Questions.submit(context.plan, context.server, "test", editor.ws, {
+		kind: "question:submit",
+		ts: 0,
+		rid: "save-1",
+		id: context.id,
+		revision: submitRev,
+	});
+	expect(editor.frames.at(-1)).toMatchObject({ kind: "question:submit", ok: true });
+	expect(context.plan.records.get(context.id)?.lastRevision).toBe(2);
+
+	// Even with closed tombstones cleared, reopening starts strictly above lastRevision (3).
+	context.plan.questions.closed.clear();
+	await reopen(context);
+	expect(Store.get(context.plan.questions, context.id)!.revision).toBe(3);
+	await Questions.submit(context.plan, context.server, "test", stale.ws, {
+		kind: "question:submit",
+		ts: 0,
+		rid: "stale-after-restart",
+		id: context.id,
+		revision: 2,
+	});
+	expect(stale.frames.at(-1)).toMatchObject({
+		kind: "question:submit",
+		rid: "stale-after-restart",
+		id: context.id,
+		ok: false,
+		reason: "stale",
+		current: 3,
+	});
 });

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import { Sessions } from "../../auth/session";
+import { plannerToActOn } from "../../questions/answer-turns";
 import * as Store from "../../questions/store";
 import { hostInputRoom } from "../../testing/decisions";
 import { expectPlainStatus } from "../../testing/plain-words";
@@ -648,7 +649,7 @@ describe("a remote Planner whose link a cut closed", () => {
 		expect(client.messages.filter(message => message.type === "input-result")).toEqual([]);
 	});
 
-	it("withdraws the Decision of a question its client resumes without, and gives it nothing", async () => {
+	it("detaches the waiter and keeps the Decision open when its client resumes without naming it, and gives the client nothing", async () => {
 		let d = await deploy();
 		let next = await d.cut();
 		let { g, unsent } = await reopen(d, next);
@@ -658,8 +659,13 @@ describe("a remote Planner whose link a cut closed", () => {
 			type: "resumed",
 			sessions: [{ session: d.sessionId, requests: [] }],
 		});
-		await until(() => g.plan.records.get(d.card.id)?.status !== "open");
-		expect(g.plan.records.get(d.card.id)?.status).toBe("cancelled");
+		await until(() => Store.get(g.plan.questions, d.card.id)?.awaited === undefined);
+		expect(g.plan.records.get(d.card.id)?.status).toBe("open");
+		expect(plannerToActOn(
+			g.plan.records.get(d.card.id)!,
+			Store.get(g.plan.questions, d.card.id)!,
+		)).toBe(true);
+		expect(client.messages.filter(message => message.type === "input-result")).toEqual([]);
 		expect(unsent).toEqual([]);
 	});
 

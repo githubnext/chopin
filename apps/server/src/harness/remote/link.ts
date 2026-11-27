@@ -37,6 +37,7 @@ import type {
 } from "@chopin/agent-link";
 import type { JsonValue, PlannerHeldSession } from "../../storage/model";
 import { withdrawnValue } from "../atomic/human-input";
+import { DETACH_WAITER } from "../../questions/service-ask";
 import type { AskedInput, HumanInput, HumanInputStatus, InputMethod } from "../atomic/human-input";
 import type { PlannerTurn } from "../turn-level";
 import type { RemotePlanner } from "./registry";
@@ -165,6 +166,24 @@ export class ToolBoundaryError extends Error {
 	}
 }
 
+/**
+ * An unplanned disconnect ended a running turn. Carrying this on the error itself
+ * lets Chat classify the turn as dropped even when no question kept the session
+ * suspended or the client already reconnected before the catch handler ran.
+ */
+export class PlannerDisconnectedError extends Error {
+	readonly disconnected = true as const;
+	constructor(message = "The machine disconnected during the turn.") {
+		super(message);
+		this.name = "PlannerDisconnectedError";
+	}
+}
+
+export function isPlannerDisconnectedError(error: unknown): error is PlannerDisconnectedError {
+	return error instanceof PlannerDisconnectedError
+		|| (error instanceof Error && (error as { disconnected?: unknown }).disconnected === true);
+}
+
 function unsupported(capability: string): HarnessCapabilityUnsupportedError {
 	return new HarnessCapabilityUnsupportedError({
 		harnessId: "remote",
@@ -264,7 +283,9 @@ type Port = {
 	steer(session: string, turn: string, prompt: string): Promise<void>;
 	/** Withdraws the questions asked while `turn` ran. */
 	withdraw(session: string, turn: string): void;
-	forget(session: string): void;
+	/** Explicitly withdraws every open question belonging to `session` (as on user Stop). */
+	withdrawSession(session: string): void;
+	forget(session: string, withdraw?: boolean): void;
 	/** Whether the client's work in `session` goes on past a restart: it is kept, not destroyed. */
 	kept(session: string): boolean;
 	/** Throws, closing the link, when the caller can no longer read the document. */
@@ -328,6 +349,12 @@ type OpenInput = {
 	restored?: true;
 	/** The host this was last asked again through; a result of an earlier one is not sent. */
 	joined?: RejoinHost;
+	/**
+	 * Set when the waiter was detached rather than explicitly withdrawn: `"silent"` skips
+	 * sending an `input-result` (link closing or request omitted from `resume`), while
+	 * `"notify"` settles the client's waiting ask on a still-attached link when a session ends.
+	 */
+	detached?: "silent" | "notify";
 };
 
 /**
@@ -339,7 +366,7 @@ export type RejoinHost = {
 	join(
 		asked: AskedInput,
 		signal: AbortSignal,
-	): Promise<{ status: HumanInputStatus; value: unknown }>;
+	): Promise<{ status: HumanInputStatus; value: unknown; answeredDecisions?: string[] }>;
 	/**
 	 * Decisions answered whose answer its client can never be given: it did not come back for
 	 * it. They are handed to the Planner as a turn, as a decision nobody waits on is.
@@ -433,6 +460,7 @@ class RemoteSession {
 		this.id = id;
 		this.planner = planner;
 		this.#port = port;
+		this.planner.withdrawInputs = () => this.#port.withdrawSession(this.id);
 		void this.#started.promise.catch(() => {});
 	}
 
@@ -514,7 +542,7 @@ class RemoteSession {
 		if (turn) {
 			this.#finish(
 				turn,
-				turn.stopped ? undefined : new Error("The machine disconnected during the turn."),
+				turn.stopped ? undefined : new PlannerDisconnectedError(),
 			);
 		}
 	}
@@ -700,7 +728,7 @@ class RemoteSession {
 	}
 
 	/** The link is gone for good: nothing more will arrive for this session. */
-	linkClosed(): void {
+	linkClosed(unplanned = false): void {
 		// A session the cut keeps for its client keeps its launch, which the hold names.
 		let held = this.planner.stopping === true && this.#port.kept(this.id);
 		this.planner.suspended = false;
@@ -709,7 +737,11 @@ class RemoteSession {
 		if (turn) {
 			this.#finish(
 				turn,
-				turn.stopped ? undefined : new Error("The machine disconnected during the turn."),
+				turn.stopped
+					? undefined
+					: unplanned
+					? new PlannerDisconnectedError()
+					: new Error("The machine disconnected during the turn."),
 			);
 		}
 		this.#closed = true;
@@ -1038,7 +1070,7 @@ class RemoteSession {
 		if (this.#current) throw new Error("The remote Planner session already has an active turn.");
 	}
 
-	async close(): Promise<void> {
+	async close(withdraw = false): Promise<void> {
 		if (this.#closed) return;
 		if (this.planner.stopping && this.#port.kept(this.id)) {
 			// The server is going down and the client's work here goes on: it is neither destroyed
@@ -1061,7 +1093,7 @@ class RemoteSession {
 		}
 		this.#releaseAi();
 		this.#port.send({ type: "destroy", session: this.id });
-		this.#port.forget(this.id);
+		this.#port.forget(this.id, withdraw);
 	}
 
 	#session(): HarnessV1Session {
@@ -1146,6 +1178,8 @@ export class AgentLink {
 	#resumed = false;
 	/** Whether the server or the client chose to end this link, rather than the network failing. */
 	#planned = false;
+	/** Whether closing this link explicitly withdraws open Decisions (archived/deleted document). */
+	#withdrawOnClose = false;
 	/** What the client last reported that counted (see `#counts`), for `#catalogAccounts`. */
 	#catalog: CapabilityCatalog | undefined;
 	/**
@@ -1194,12 +1228,20 @@ export class AgentLink {
 					this.#inputs.delete(request);
 				}
 			},
-			forget: session => {
+			withdrawSession: session => {
+				for (let [request, input] of this.#inputs) {
+					if (input.session !== session) continue;
+					input.controller.abort();
+					this.#inputs.delete(request);
+				}
+			},
+			forget: (session, withdraw = false) => {
 				this.#sessions.delete(session);
-				this.#cancelInputs(session);
+				this.#cancelInputs(session, withdraw ? "withdraw" : "notify");
 				for (let [request, owed] of this.#unacked) {
 					if (owed.session !== session) continue;
 					this.#unacked.delete(request);
+					if (!this.#stopping && !withdraw) owed.unsent?.();
 					owed.delivered();
 				}
 				this.#lapsed();
@@ -1262,6 +1304,7 @@ export class AgentLink {
 			let document: RebuiltDocument = hooks.open ? { open: hooks.open } : {};
 			let planner: RemotePlanner = { channelId, isolated: false, rebuilt: document };
 			planner.humanInput = report => rebuiltInput(document, report);
+			planner.unsentDecisions = decisions => document.host?.unsent(decisions);
 			let session = new RemoteSession(item.id, planner, link.#port);
 			session.restore(item.aiLaunchId);
 			link.#sessions.set(item.id, session);
@@ -1351,6 +1394,7 @@ export class AgentLink {
 	}
 
 	async #rejoined(request: string, input: OpenInput, host: RejoinHost): Promise<void> {
+		let unsent = once(() => host.unsent(input.decisions));
 		let reply = (
 			status: ServerMessageOf<"input-result">["status"],
 			value?: unknown,
@@ -1364,14 +1408,32 @@ export class AgentLink {
 				...(value === undefined ? {} : { value: value as never }),
 				...(text === undefined ? {} : { message: text }),
 			};
-			let unsent = once(() => host.unsent(input.decisions));
-			this.#answer(result, input.session, NO_DELIVERY, unsent);
+			this.#answer(
+				result,
+				input.session,
+				NO_DELIVERY,
+				status === "answered" ? unsent : undefined,
+			);
 		};
 		try {
-			let { status, value } = await host.join(
+			let { status, value, answeredDecisions } = await host.join(
 				{ method: input.method, decisions: input.decisions },
 				input.controller.signal,
 			);
+			if (input.detached === "silent") {
+				if (input.joined === host && answeredDecisions?.length) host.unsent(answeredDecisions);
+				return;
+			}
+			if (input.detached === "notify") {
+				if (input.joined === host && answeredDecisions?.length) host.unsent(answeredDecisions);
+				this.#send({
+					type: "input-result",
+					request,
+					status: "cancelled",
+					value: (value ?? null) as never,
+				});
+				return;
+			}
 			reply(input.controller.signal.aborted ? "cancelled" : status, value ?? null);
 		} catch (error) {
 			reply("failed", undefined, error instanceof Error ? error.message : String(error));
@@ -1505,7 +1567,7 @@ export class AgentLink {
 		try {
 			return await session.start();
 		} catch (error) {
-			await session.close();
+			await session.close(true);
 			// When a client refuses `fork` (e.g. parent session evicted), fall back to `start`.
 			if (
 				planner.forkFrom
@@ -1520,7 +1582,7 @@ export class AgentLink {
 				try {
 					return await fallback.start();
 				} catch (retryError) {
-					await fallback.close();
+					await fallback.close(true);
 					throw retryError;
 				}
 			}
@@ -1598,8 +1660,9 @@ export class AgentLink {
 	}
 
 	/** Tells the client why it is no longer the Planner, then closes the link. */
-	revoke(code: RefusalCode, message: string): void {
+	revoke(code: RefusalCode, message: string, withdraw = false): void {
 		if (this.#state === "closed" || this.#state === "suspended") return;
+		this.#withdrawOnClose = withdraw;
 		this.#refuse(code, message);
 	}
 
@@ -1644,11 +1707,13 @@ export class AgentLink {
 			? [...this.#sessions.values()].filter(session => this.#keeps(session))
 			: [];
 		if (kept.length) return this.#suspend(kept);
+		let unplanned = !this.#planned && !this.#stopping;
+		let withdraw = this.#withdrawOnClose;
 		this.#state = "closed";
 		clearInterval(this.#watch);
 		this.#forget?.();
 		this.#forget = undefined;
-		this.#teardown();
+		this.#teardown({ unplanned, withdraw });
 	}
 
 	/**
@@ -1664,10 +1729,10 @@ export class AgentLink {
 	}
 
 	/** Ends a suspended link for good: nothing will take back what it kept. */
-	terminate(): void {
+	terminate(withdraw = false): void {
 		if (this.#state !== "suspended") return;
 		this.#state = "closed";
-		this.#teardown();
+		this.#teardown({ unplanned: false, withdraw });
 	}
 
 	#waitingOn(session: string): number {
@@ -1691,9 +1756,9 @@ export class AgentLink {
 				session.suspend();
 				continue;
 			}
-			session.linkClosed();
+			session.linkClosed(true);
 			this.#sessions.delete(id);
-			this.#cancelInputs(id);
+			this.#cancelInputs(id, "silent");
 		}
 		for (let control of this.#controls.values()) {
 			control.reject(new Error("The agent connection closed."));
@@ -1703,21 +1768,39 @@ export class AgentLink {
 		// client that returns and still waits on it.
 		for (let owed of this.#unacked.values()) {
 			if (this.#sessions.has(owed.session)) this.#outbox.push(owed);
-			else owed.delivered();
+			else {
+				if (!this.#stopping) owed.unsent?.();
+				owed.delivered();
+			}
 		}
 		this.#unacked.clear();
 		this.#forget?.(true);
 		this.#forget = undefined;
 	}
 
-	/** Every session and open question this link still holds ends, as when any link closes. */
-	#teardown(): void {
+	/**
+	 * Ends every session this link still holds and detaches (or, when explicitly withdrawing
+	 * for an archived/deleted document, withdraws) its open questions.
+	 */
+	#teardown({ unplanned = false, withdraw = false }: {
+		unplanned?: boolean;
+		withdraw?: boolean;
+	} = {}): void {
 		this.#offered.resolve();
-		for (let session of this.#sessions.values()) session.linkClosed();
+		for (let session of this.#sessions.values()) session.linkClosed(unplanned);
 		this.#sessions.clear();
-		if (!this.#stopping) { for (let input of this.#inputs.values()) input.controller.abort(); }
+		if (!this.#stopping) {
+			for (let input of this.#inputs.values()) {
+				if (withdraw) input.controller.abort();
+				else {
+					input.detached = "silent";
+					input.controller.abort(DETACH_WAITER);
+				}
+			}
+		}
 		this.#inputs.clear();
 		for (let owed of this.#unacked.values()) {
+			if (!this.#stopping && !withdraw) owed.unsent?.();
 			owed.delivered();
 		}
 		this.#unacked.clear();
@@ -1727,7 +1810,7 @@ export class AgentLink {
 		this.#controls.clear();
 		// The answers waiting for a client that is not coming back can never be delivered.
 		for (let { delivered, unsent } of this.#outbox.splice(0)) {
-			unsent?.();
+			if (!this.#stopping && !withdraw) unsent?.();
 			delivered();
 		}
 	}
@@ -1754,7 +1837,9 @@ export class AgentLink {
 		this.#send({ type: "resumed", sessions: resumed });
 		// The launch a resumed session held may have ended with its link, or with the process.
 		for (let { session } of resumed) this.#sessions.get(session)?.renewAi();
-		for (let { result, session, delivered } of results) this.#answer(result, session, delivered);
+		for (let { result, session, delivered, unsent } of results) {
+			this.#answer(result, session, delivered, unsent);
+		}
 	}
 
 	/**
@@ -1934,8 +2019,8 @@ export class AgentLink {
 		for (let [id, session] of this.#sessions) {
 			let waiting = held.get(id);
 			if (!waiting) {
-				session.linkClosed();
-				this.#cancelInputs(id);
+				session.linkClosed(false);
+				this.#cancelInputs(id, "silent");
 				continue;
 			}
 			let requests: string[] = [];
@@ -1943,7 +2028,8 @@ export class AgentLink {
 				if (input.session !== id) continue;
 				if (waiting.has(request)) requests.push(request);
 				else {
-					input.controller.abort();
+					input.detached = "silent";
+					input.controller.abort(DETACH_WAITER);
 					this.#inputs.delete(request);
 				}
 			}
@@ -1998,7 +2084,7 @@ export class AgentLink {
 		} finally {
 			if (!sent) unsent?.();
 			if (!sent || !this.resumable) delivered();
-			else this.#awaitAck({ result, session, delivered });
+			else this.#awaitAck({ result, session, delivered, ...(unsent ? { unsent } : {}) });
 		}
 	}
 
@@ -2193,6 +2279,7 @@ export class AgentLink {
 
 	async #input(message: ClientMessageOf<"input-request">): Promise<void> {
 		let delivered: () => void = NO_DELIVERY;
+		let unsent: (() => void) | undefined;
 		let reply = (
 			status: ServerMessageOf<"input-result">["status"],
 			value?: unknown,
@@ -2208,6 +2295,7 @@ export class AgentLink {
 				},
 				message.session,
 				delivered,
+				status === "answered" ? unsent : undefined,
 			);
 		if (this.#inputs.has(message.request) || this.#inputIds.has(message.request)) {
 			return this.#violate("protocol", `Input request ${message.request} was repeated.`);
@@ -2239,17 +2327,24 @@ export class AgentLink {
 			method: message.input.method,
 			decisions: [],
 		};
+		unsent = once(() => {
+			if (open.decisions.length > 0) session.planner.unsentDecisions?.(open.decisions);
+		});
 		this.#inputs.set(message.request, open);
 		let status: HumanInputStatus = "cancelled";
 		let host = humanInput(outcome => {
 			status = outcome;
 		});
+		let answeredOnDetach: string[] = [];
 		let options = {
 			signal: controller.signal,
 			requestId: message.request,
 			sessionId: message.session,
 			asked: (decisions: string[]) => {
 				open.decisions = decisions;
+			},
+			answered: (decisions: string[]) => {
+				answeredOnDetach = decisions;
 			},
 			...(message.block ? { block: message.block } : {}),
 		};
@@ -2264,6 +2359,22 @@ export class AgentLink {
 				: input.method === "input"
 				? await host.input(input.title, input.placeholder, options)
 				: await host.editor(input.title, input.initial, options);
+			if (open.detached === "silent") {
+				if (answeredOnDetach.length > 0) session.planner.unsentDecisions?.(answeredOnDetach);
+				delivered();
+				return;
+			}
+			if (open.detached === "notify") {
+				if (answeredOnDetach.length > 0) session.planner.unsentDecisions?.(answeredOnDetach);
+				this.#send({
+					type: "input-result",
+					request: message.request,
+					status: "cancelled",
+					value: (value ?? null) as never,
+				});
+				delivered();
+				return;
+			}
 			reply(controller.signal.aborted ? "cancelled" : status, value ?? null);
 		} catch (error) {
 			reply("failed", undefined, error instanceof Error ? error.message : String(error));
@@ -2272,10 +2383,16 @@ export class AgentLink {
 		}
 	}
 
-	#cancelInputs(session: string): void {
+	#cancelInputs(session: string, mode: "withdraw" | "silent" | "notify" = "silent"): void {
 		for (let [request, input] of this.#inputs) {
 			if (input.session !== session) continue;
-			if (!this.#stopping) input.controller.abort();
+			if (!this.#stopping) {
+				if (mode === "withdraw") input.controller.abort();
+				else {
+					input.detached = mode;
+					input.controller.abort(DETACH_WAITER);
+				}
+			}
 			this.#inputs.delete(request);
 		}
 	}

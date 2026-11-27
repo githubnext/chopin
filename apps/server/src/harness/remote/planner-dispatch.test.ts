@@ -1571,6 +1571,76 @@ describe("a document on Default machine", () => {
 			sessions: [{ session: "planner-session", requests: ["ship"] }],
 		});
 	});
+
+	it("does not stop an actively replying Planner when its machine's connector disconnects", async () => {
+		let { link, laptop, session, channel, server } = await unwatched(true);
+		let turn = session.doPromptTurn({
+			prompt: "outline the plan",
+			skills: [],
+			tools: [],
+			emit: () => {},
+		});
+		let { turn: id } = await link.next("turn");
+		await turn;
+		expect(server.attachments.waiting(channel.id)).toBe(false);
+		expect(server.attachments.busy(channel.id)).toBe(true);
+		expect(server.attachments.keeping(channel.id)).toBe(true);
+
+		// The connector drops while the Planner is actively replying with no open question yet.
+		await laptop.disconnect();
+		await Bun.sleep(100);
+		expect(server.attachments.attached(channel.id)).toBe(true);
+		expect(link.messages.some(message => message.type === "refused")).toBe(false);
+
+		link.send({ type: "turn-end", session: "planner-session", turn: id, status: "finished" });
+		await Bun.sleep(50);
+	});
+
+	it("includes a machine's restored/parked holds in plannerDocuments after a server restart even when inUse is empty", async () => {
+		let dispatch = await dispatchServer();
+		let { machine, visit, channel, url, restart } = dispatch;
+		let laptop = await machine("member", "U_member", "laptop");
+		await visit();
+		await laptop.poll([]);
+		let link = await laptop.backend("resumable-sessions");
+		await link.next("attached");
+		let room = await hostInputRoom();
+		cleanups.push(room.close);
+		let planner: RemotePlanner = {
+			channelId: channel.id,
+			isolated: false,
+			humanInput: report => createHumanInput(room.room, report),
+		};
+		let started = link.next("start").then(start => {
+			link.send({ type: "started", session: start.session });
+		});
+		let session = await dispatch.server.links.at(-1)!.startSession("planner-session", planner);
+		cleanups.push(() => session.doDestroy?.());
+		await started;
+		link.send({
+			type: "input-request",
+			request: "ship",
+			session: "planner-session",
+			input: { method: "confirm", title: "Ship?", message: "Now." },
+		});
+		await room.cards(1);
+
+		// Cut and restore holds in a fresh server process WITHOUT calling visit()/plannerUsed()
+		// so process-local `inUse` is empty.
+		dispatch.server.attachments.shutdown();
+		let frozen = dispatch.server.attachments.freeze(10_000);
+		await restart();
+		await dispatch.server.attachments.restore(
+			frozen.map(row => ({ ...row, fencing: 1 })),
+		);
+		expect(dispatch.server.attachments.parkedForMachine(laptop.id)).toEqual([channel.id]);
+
+		await laptop.reconnect();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+	});
 });
 
 describe("a teammate's machine shared with teammates", () => {

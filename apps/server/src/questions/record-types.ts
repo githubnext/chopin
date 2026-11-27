@@ -54,4 +54,9 @@ export type Record = {
 	 * person's words, or their clearing, are never replaced by a later draft.
 	 */
 	whyBy?: string;
+	/**
+	 * Highest draft revision reached when this card was last closed or settled, kept so reopening
+	 * continues monotonically even after a restart or tombstone expiry.
+	 */
+	lastRevision?: number;
 };
