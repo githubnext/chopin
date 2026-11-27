@@ -1147,9 +1147,11 @@ The `open_decisions` and `ask` results' `current_plan` stays JSON, and leaves ou
 ## Questions
 
 An `input-request` carries one question call in `input`, and becomes Decisions
-in the document. It has no time limit: it waits until members answer it or it
-is withdrawn (the client sends `input-cancel`, the session ends, or the
-connection closes), and only then gets its `input-result`:
+in the document. It has no time limit: it waits until members answer it, it is
+explicitly withdrawn (the client sends `input-cancel`, a person presses Stop in
+Chat, a member cancels the card, or the document is archived or deleted), or
+its waiter detaches (the link drops, detaches, or ends without resuming), and
+only then settles:
 
 ```text
 { "method": "questionnaire", "params": { "questions": [{ "question": "", "header": "", "options": [{ "label": "", "description": "", "preview?": "" }], "multiSelect?": true }] } }
@@ -1191,14 +1193,21 @@ names the block the same way, in the options of its host input request.
   server, where the cards stayed in Decisions marked expired and no partial
   answers were returned.
 - `cancelled`: a member cancelled a question, the client sent `input-cancel`,
-  the question was withdrawn before it was asked, the session ended, or the connection
-  closed. Open cards are withdrawn. When a member cancelled one question of a
-  questionnaire after others were answered, `answers` keeps those others; it is
-  empty in every other case. The package client settles a question withdrawn
-  before it was sent, or one still open when the connection closes, with a local
-  `cancelled` result that has a `message` and no `value`. With
-  `resumable-sessions`, a question still open when the link drops unexpectedly
-  does not end: see [Resuming](#resuming-after-a-dropped-link).
+  the question was withdrawn before it was asked, Stop ended the turn or kept
+  session, the document was archived or deleted, or the session or connection
+  ended. Only an explicit withdrawal (Stop, member cancel, document archive or
+  delete, or `input-cancel`) cancels and removes open Decision cards from the
+  document. When a link drops, detaches, is abandoned, or resumes without
+  naming a request — or when a retained session ends without Stop — Chopin
+  detaches the in-memory waiter and leaves the open Decision cards in the
+  document so a later human Save hands the answer durably to the Planner as a
+  turn. When a member cancelled one question of a questionnaire after others
+  were answered, `answers` keeps those others; it is empty in every other case.
+  The package client settles a question withdrawn before it was sent, or one
+  still open when the connection closes, with a local `cancelled` result that
+  has a `message` and no `value`. With `resumable-sessions`, a question still
+  open when the link drops unexpectedly does not end: see
+  [Resuming](#resuming-after-a-dropped-link).
 - `failed`: the request could not become Decisions, for example in an isolated
   session or with 16 requests already open on the connection.
 
@@ -1329,13 +1338,20 @@ needs no feature check: an older Chopin shows the same text unformatted.
 
 `protocol` covers a message before `attach` is answered, a second `attach`, and
 a repeated `input-request` id the server remembers. When the connection closes for
-any reason, the server ends a running turn with an error, stops the turn's host
-tools still running, withdraws open questions and the Decisions those tools
-opened, and forgets the connection; reattaching starts new sessions, except
-where [resuming](#resuming-after-a-dropped-link) keeps them. The account keeps
-the document's Planner ownership as described in [Ownership](#ownership): for the
-grace period, or with no deadline while a `resumable-sessions` link's work is kept.
-A server never replays an interrupted turn.
+any reason, the server ends a running turn (classifying an unplanned drop as a
+connection drop rather than a reply failure, even when no question was open or
+the client reconnects quickly), stops the turn's host tools still running,
+detaches waiters on open `input-request` Decisions so the cards stay open in the
+document (only explicit withdrawal — Stop, member cancel, document archive or
+delete, or `input-cancel` — removes open `input-request` cards), and forgets the
+connection; reattaching starts new sessions, except where
+[resuming](#resuming-after-a-dropped-link) keeps them. Any answer saved while
+the link was down or sent without an `input-received` acknowledgement is handed
+durably to the Planner as a turn if the link later detaches or abandons without
+delivering it. The account keeps the document's Planner ownership as described
+in [Ownership](#ownership): for the grace period, or with no deadline while a
+`resumable-sessions` link's work is kept. A server never replays an interrupted
+turn.
 
 ### Resuming after a dropped link
 
@@ -1347,27 +1363,31 @@ not apply to it.
 
 - **What drops.** The socket closes with no `detach` and no `refused`, or the
   server closes it as `unresponsive` (see [Pings](#pings)). The turn under way
-  still fails with an error and its host tools stop, as on any close.
+  ends as a dropped connection (not `"Couldn't finish the reply."`), even if no
+  `input-request` was open or the client reconnects before turn cleanup runs,
+  and its host tools stop.
 - **What is kept.** Each started session that has a question the client asked and
   nobody has answered, or an answer its client has not acknowledged, stays as it was:
   its Decisions stay open in the document and can be answered, and an answer given
-  meanwhile is held. Other sessions end as they always did. Chat says nothing of the
-  connection itself: the machine button and its menu carry that state, and nothing
-  confirms it came back.
+  meanwhile is held. Other sessions end without withdrawing open Decisions. Chat says
+  nothing of the connection itself: the machine button and its menu carry that state,
+  and nothing confirms it came back.
   Nothing waits on the client in the meantime: `@chopin` and `invoke_planner` are
   refused as [without an attached Planner](#without-an-attached-planner), and no
   other account can attach. The document is not let go either: a Default machine's
-  idle period, a machine that went quiet, and the owner's GitHub credential being
-  renewed end nothing.
+  idle period, a machine that went quiet (including while actively replying), and the
+  owner's GitHub credential being renewed end nothing.
 - **Nothing but an explicit end.** There is no deadline. The operator's
   `PLANNER_ATTACH_GRACE_MS` leases only a connection that detached, or dropped with
   nothing to keep. A client may be away for minutes or for days; it resumes the same
   session and receives what was answered or cancelled meanwhile.
-- **A question the client withdraws.** Cancelling a question while the link is down
-  ends the client's wait at once, with a local `cancelled` result, and the next link
-  does not name it, which withdraws the Decision in Chopin before anything else
-  happens. A client that sent `input-cancel` on a link that then dropped is
-  treated the same way.
+- **A question the client drops while away.** Cancelling a question while the link
+  is down ends the client's wait at once, with a local `cancelled` result, and the
+  next link does not name it in `resume`. Because `resume` omitting a request does
+  not distinguish a local cancel from a client that lost its in-memory state, Chopin
+  detaches the waiter and leaves the Decision card open in the document so a human's
+  answer can still be handed to the Planner as a turn. Only an explicit
+  `input-cancel` frame on a live link withdraws the Decision card.
 - **Stop withdraws a question.** Stop on a Planner that only waits on a question
   withdraws the question explicitly, and Chat says so; the client learns of it when it
   resumes. That ends what the link kept, and the account holds the document for the
@@ -1379,38 +1399,46 @@ not apply to it.
   answers `resumed` in the same shape: the sessions it kept and gave back, each with
   the requests it still holds, whether open or answered while the link was down. It
   then sends each answered request's `input-result` the client has not acknowledged,
-  and the client acknowledges it with `input-received`. A session or request the client does not name has
-  ended and is withdrawn; one the server does not list has ended there: the client
-  settles its questions as cancelled and calls its `destroy` handler for the session.
+  and the client acknowledges it with `input-received`. A session or request the
+  client does not name detaches its waiter (leaving any open Decision card in the
+  document for durable handoff, and handing any already-answered unacknowledged
+  decision to the Planner as a turn); one the server does not list has ended there:
+  the client settles its questions as cancelled and calls its `destroy` handler for
+  the session.
   A client that sends anything else first, or does not offer the feature, holds
   nothing to resume. A `refused` with `retry` (`unavailable`, see
   [Ownership](#ownership)) does not end the client's questions: Chopin could not decide,
   so the same `resume` is sent again on the client's backoff, which may or may not
   succeed. Any other `refused` (`planner-attached` included, whoever holds the
   document) and any `error` ends them.
-- **A client that does not offer the feature.** It behaves as it always did: when its
-  link drops, Chopin ends the turn, withdraws the questions the client asked and
-  forgets its sessions. Such a client settles its own
-  waiting questions when its socket closes and holds nothing it could resume, so
-  keeping them open would promise answers nobody can receive. A client that wants its
-  work to survive a drop must offer `resumable-sessions`; the package client does by
-  default (`resumable: false` opts out).
+- **A client that does not offer the feature.** When its link drops, Chopin ends
+  the turn as a dropped connection, forgets its sessions, and detaches waiters on
+  its open `input-request` Decisions so the cards stay open in the document (with
+  any subsequent human Save handed to the Planner as a turn once one attaches). The
+  client itself still settles its local pending asks on close. A client that wants
+  its sessions and direct `input-result` delivery to survive a drop must offer
+  `resumable-sessions`; the package client does by default (`resumable: false` opts
+  out).
 - **What a client implements.** Offer `resumable-sessions` in `Chopin-Agent-Features`
   and check that `attached` lists it; acknowledge every `input-result` with
   `input-received`, including one for a request already settled; keep each session and
   its waiting `input-request` ids across a drop; on the next connection send `resume`
   first and handle `resumed`, then the redelivered `input-result`s; retry the same
   `resume` on a `refused` with `retry`, and treat any other `refused` or `error` as final.
-- **What still ends it for good.** Its own `detach`; any definitive `refused` (every
-  one without `retry`) or protocol error; the owner's sign-out or a credential that
-  cannot be renewed (routine credential renewal does not end it); a Planner reset;
-  revoking or unpairing the machine that attached it; the document's owner choosing
-  another machine for it; archiving or deleting the document; a Stop that withdraws
-  its last question; and the same account attaching with a client that does not
-  resume, which includes a browser sign-in attaching over a paired machine's parked
-  work, since that client cannot resume it. All of these withdraw the questions, and
-  a later `resume` finds nothing. A server restart does not end it: see below. A
-  person with write access can always end a disconnected Planner by resetting it.
+- **What still ends the hold for good.** Its own `detach`; any definitive `refused`
+  (every one without `retry`) or protocol error; the owner's sign-out or a credential
+  that cannot be renewed (routine credential renewal, including rotating to a fresh
+  delegated login for the same owner and repository on reconnect, does not end it); a
+  Planner reset; revoking or unpairing the machine that attached it; the document's
+  owner choosing another machine for it; archiving or deleting the document; a Stop
+  that withdraws its last question; and the same account attaching with a client that
+  does not resume, which includes a browser sign-in attaching over a paired machine's
+  parked work, since that client cannot resume it. Of these, only archiving or deleting
+  the document and Stop withdraw open Decision cards; every other hold end detaches
+  waiters so open cards stay in the document and any unacknowledged answers fall back
+  to the Planner as turns, while a later `resume` finds no held session. A server
+  restart does not end the hold: see below. A person with write access can always end
+  a disconnected Planner by resetting it.
 
 #### When the server is restarting
 
@@ -1476,8 +1504,9 @@ A returning client attaches, and sends `resume` as usual:
   the client's own request, as an `input-result` with the result the old process would have
   sent, once. An answer given before the client is back waits and is sent after `resumed`; one
   given after goes straight to it. No turn of its own follows, because the question is waited
-  on. A question a client resumes without, because it no longer waits on it, is withdrawn, as
-  `input-cancel` withdraws it. No turn of the new process opened a resumed session, yet it is
+  on. A question a client resumes without detaches its waiter and leaves its Decision
+  open in the document, so a later human Save hands the answer to the Planner as a
+  turn. No turn of the new process opened a resumed session, yet it is
   the document's as before. A question it asks after the restart, an `input-request`
   on the resumed session, becomes Decisions as one asked before it did, and its answer goes to
   that request; the document is opened for it if nobody has it open, and kept open until the

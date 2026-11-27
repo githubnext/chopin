@@ -1,5 +1,6 @@
 import type { Chat as Wire } from "@chopin/protocol";
 
+import { isPlannerDisconnectedError } from "../harness/remote/link";
 import { isToolBoundaryError, PlannerReplyError, ReplyFailedError } from "./reply-policy";
 
 type Input = {
@@ -30,7 +31,7 @@ export function turnFailureOf(input: Input): Wire.TurnFailure {
 		...input.request !== undefined ? { request: input.request } : {},
 		...input.focus !== undefined ? { focus: input.focus } : {},
 	};
-	if (input.suspended) return { kind: "dropped", ...turn };
+	if (input.suspended || isPlannerDisconnectedError(error)) return { kind: "dropped", ...turn };
 	if (interruption) {
 		if (interruption.startsWith("Chopin's tool approval")) return { kind: "refused", ...turn };
 		if (interruption.startsWith("Chopin's tool boundary failure")) return { kind: "tool", ...turn };

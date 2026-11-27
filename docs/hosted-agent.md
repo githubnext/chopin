@@ -756,7 +756,11 @@ Decision, for which the document is opened if nobody has it open. Startup's rese
 browser sign-in that has stored credentials; a paired machine's hold names the machine
 and no login, which a restart cannot keep: the machine's backend attaches again with its
 credential, which is stored by digest and so accepted at once, and its new login takes over
-the hold.
+the hold. A reconnecting connector's Planner assignment list includes every unarchived
+document with a parked or restored hold for that machine, even before anyone reopens the
+document after a restart, so the connector keeps the backend running while it resumes.
+Likewise, a connector socket dropping while its Planner is actively replying or waiting on
+an open question does not stop that Planner.
 
 **The hand-over window.** A hold whose link the cut closed is given `HANDOVER_PLANNER_WINDOW_MS`
 from the release of the lease, the time its client is told it has. The cut cannot know when the
@@ -893,21 +897,30 @@ their structured result as the turn's JSON. The job runner starts no worker for
 a document with no attached client; its job stays pending until one attaches. A turn ends with `turn-end`. An abort waits briefly for the
 client's `turn-end`, then ends the turn anyway. A turn that ends while one of
 its host tools still runs, such as an `ask` waiting on Decisions, stops that tool
-and withdraws the cards it opened. A connection that closes mid-turn ends the turn
-with an error rather than as a stop and its open questions are withdrawn; nothing
-waits on a client that has gone. A
+and withdraws the cards it opened. An unplanned connection drop mid-turn ends the
+turn as a connection drop (`dropped`, never `"Couldn't finish the reply."`) even
+when no `input-request` was open or the client reconnects quickly; waiters on open
+`input-request` Decisions detach rather than withdraw so the Decision cards stay
+open in the document and any human answers given while offline or before
+acknowledgement are delivered durably to the Planner once one is attached. A
 session the client refuses or does not start in time is destroyed, and any
 question it asked while starting is withdrawn.
 
 **Questions.** An `input-request` carries one Atomic `HostInput` call
 (`questionnaire`, `confirm`, `select`, `input`, or `editor`) and becomes Decisions
 through the same path as the [full Atomic Planner](#full-atomic-planner): the same
-verbatim text, the same 30-minute expiry, and cancellation that withdraws open
-cards. `input-result` returns what Atomic would have received in
-process, with a status that tells an expiry from a cancellation. Stopping a turn
-withdraws the questions it asked while it ran, as Stop
-does an Atomic Planner's, and cancels at once any it asks before it ends, so a
-Decision the turn waited on never keeps its session for the next message.
+verbatim text, no time limit, and explicit withdrawal when cancelled directly.
+`input-result` returns what Atomic would have received in process. Only an
+explicit withdrawal — pressing **Stop** in Chat (during a turn or on a kept
+session waiting on a question), a member cancelling the card, archiving or
+deleting the document, or the client sending `input-cancel` — cancels and removes
+open Decision cards. Detaching or dropping a link, switching machines, abandoning
+a parked hold, omitting a request on `resume`, or ending a retained session after
+a credential rebind failure detaches the waiter while leaving open Decision cards
+in the document (`awaited` cleared), so a later Save hands the answer to the
+Planner as a turn. Stopping a turn withdraws the questions it asked while it ran,
+as Stop does an Atomic Planner's, and cancels at once any it asks before it ends,
+so a Decision the turn waited on never keeps its session for the next message.
 
 **Work the client keeps.** Chopin keeps no workflow runs of a client's and shows no run cards: a
 client's own work that outlives its turn is the client's to report in its replies. A session is

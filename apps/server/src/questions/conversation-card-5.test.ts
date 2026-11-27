@@ -86,7 +86,7 @@ test("rapid Save, Reopen, Save retains each actor and generation without a mirro
 		ts: 0,
 		rid: "save-2",
 		id,
-		revision: 1,
+		revision: 3,
 		suggestedOptionId: OPTION,
 	});
 	expect(replies.filter(frame => frame.ok).map(frame => frame.kind)).toEqual([

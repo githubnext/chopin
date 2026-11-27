@@ -11,10 +11,18 @@ import { type AskNear, publishQuestions } from "./service-publish";
 export type { AskNear } from "./service-publish";
 
 /**
+ * Abort reason for `ask` and `rejoin` that detaches the waiter while leaving open Decision
+ * cards in the document (as when a remote link drops, detaches, or abandons a request).
+ * Any other abort explicitly withdraws the open cards.
+ */
+export const DETACH_WAITER = Symbol("chopin:detach-waiter");
+
+/**
  * Ask each decision independently; register its record before publishing its node.
  *
- * The cards wait until members answer them, however long that takes; an abort
- * withdraws the ones still open.
+ * The cards wait until members answer them, however long that takes; an explicit abort
+ * withdraws the ones still open, while `DETACH_WAITER` detaches the waiter and leaves
+ * them open in the document.
  */
 export async function ask(
 	plan: Plan,
@@ -35,8 +43,19 @@ export async function ask(
 	published?.(asked.map(item => item.id));
 
 	let failed = Promise.withResolvers<never>();
+	let detached = Promise.withResolvers<Ended[]>();
 	let closing: Promise<unknown> | undefined;
 	let abort = () => {
+		if (signal?.reason === DETACH_WAITER) {
+			let settled: Ended[] = asked.map(item => {
+				Store.unawait(plan.questions, item.id);
+				return plan.records.get(item.id)?.status === "answered"
+					? endedWithout(plan, item.id)
+					: { status: "cancelled", resolver: "chopin" };
+			});
+			detached.resolve(settled);
+			return;
+		}
 		closing ??= Promise.all(
 			asked.map(item => withdraw(plan, server, roomId, item.id, "chopin")),
 		);
@@ -45,7 +64,11 @@ export async function ask(
 	signal?.addEventListener("abort", abort, { once: true });
 	if (signal?.aborted) abort();
 	try {
-		let ended = await Promise.race([Promise.all(asked.map(item => item.waiting)), failed.promise]);
+		let ended = await Promise.race([
+			Promise.all(asked.map(item => item.waiting)),
+			detached.promise,
+			failed.promise,
+		]);
 		await closing;
 		return ended;
 	} finally {
@@ -86,8 +109,9 @@ function endedWithout(plan: Plan, id: string): Ended {
 
 /**
  * Waits again for decisions a process that has since restarted asked, for the client that asked
- * them and is coming back: answered ones end as they did, open ones wait on the members. An abort
- * withdraws the ones still open, as it does for `ask`.
+ * them and is coming back: answered ones end as they did, open ones wait on the members. An
+ * explicit abort withdraws the ones still open, while `DETACH_WAITER` detaches the waiter and
+ * leaves them open in the document.
  */
 export async function rejoin(
 	plan: Plan,
@@ -100,15 +124,30 @@ export async function rejoin(
 		Store.rejoin(plan.questions, id) ?? Promise.resolve(endedWithout(plan, id))
 	);
 	let failed = Promise.withResolvers<never>();
+	let detached = Promise.withResolvers<Ended[]>();
 	let closing: Promise<unknown> | undefined;
 	let abort = () => {
+		if (signal?.reason === DETACH_WAITER) {
+			let settled: Ended[] = ids.map(id => {
+				Store.unawait(plan.questions, id);
+				return plan.records.get(id)?.status === "answered"
+					? endedWithout(plan, id)
+					: { status: "cancelled", resolver: "chopin" };
+			});
+			detached.resolve(settled);
+			return;
+		}
 		closing ??= Promise.all(ids.map(id => withdraw(plan, server, roomId, id, "chopin")));
 		void closing.catch(failed.reject);
 	};
 	signal?.addEventListener("abort", abort, { once: true });
 	if (signal?.aborted) abort();
 	try {
-		let ended = await Promise.race([Promise.all(waiting), failed.promise]);
+		let ended = await Promise.race([
+			Promise.all(waiting),
+			detached.promise,
+			failed.promise,
+		]);
 		await closing;
 		return ended;
 	} finally {

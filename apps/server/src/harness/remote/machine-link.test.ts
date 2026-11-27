@@ -22,6 +22,8 @@ import {
 import { hostInputRoom } from "../../testing/decisions";
 import { createHumanInput } from "../atomic/human-input";
 import { createRemoteAdapter } from "./adapter";
+import { plannerToActOn } from "../../questions/answer-turns";
+import * as Store from "../../questions/store";
 import { agentLink } from "./endpoint";
 import { MachinePlanners } from "./machine-planners";
 import { PlannerAttachments } from "./attachments";
@@ -732,33 +734,48 @@ describe("a paired machine's Planner whose link dropped with its work kept", () 
 		expect(await next.next("input-result")).toMatchObject({ request: "ask-1", status: "answered" });
 	});
 
-	it("ends when its owner chooses another machine for the document", async () => {
+	it("ends the hold while keeping the Decision open when its owner chooses another machine for the document", async () => {
 		let p = await parkedMachine();
 		await p.server.attachments.stopMachine(
 			p.channel.id,
 			p.member.machine.id,
 			"chose another machine",
 		);
-		await until(() => p.status() === "cancelled");
+		await until(() => Store.get(p.f.plan.questions, p.card.id)?.awaited === undefined);
+		expect(p.status()).toBe("open");
+		expect(plannerToActOn(
+			p.f.plan.records.get(p.card.id)!,
+			Store.get(p.f.plan.questions, p.card.id)!,
+		)).toBe(true);
 		expect(p.server.attachments.status(p.channel.id)).toEqual({ state: "none" });
 	});
 
-	it("ends when the machine is unpaired, and neither its old credential nor a new one is accepted", async () => {
+	it("ends the hold while keeping the Decision open when the machine is unpaired, and neither its old credential nor a new one is accepted", async () => {
 		let p = await parkedMachine();
 		await p.machines.revoke(p.member.machine.id, "U_member");
-		await until(() => p.status() === "cancelled");
+		await until(() => Store.get(p.f.plan.questions, p.card.id)?.awaited === undefined);
+		expect(p.status()).toBe("open");
+		expect(plannerToActOn(
+			p.f.plan.records.get(p.card.id)!,
+			Store.get(p.f.plan.questions, p.card.id)!,
+		)).toBe(true);
 		expect(p.server.attachments.status(p.channel.id)).toEqual({ state: "none" });
 		expect(await upgrade(p.server.url, p.token)).toBe(401);
 		expect(await p.credential(p.member.token, p.channel.id))
 			.toMatchObject({ status: 401, body: { error: "machine-revoked" } });
 	});
 
-	it("ends when the same account attaches with its browser sign-in, which cannot resume a machine's work", async () => {
+	it("ends the hold while keeping the Decision open when the same account attaches with its browser sign-in", async () => {
 		let p = await parkedMachine();
 		let browser = await rawLink(p.server.url, MEMBER_TOKEN, "resumable-sessions");
 		cleanups.push(() => browser.socket.close());
 		browser.send({ type: "attach", version: AGENT_VERSION, document: p.channel.id });
 		await browser.next("attached");
-		await until(() => p.status() === "cancelled");
+		await until(() => Store.get(p.f.plan.questions, p.card.id)?.awaited === undefined);
+		expect(p.status()).toBe("open");
+		expect(plannerToActOn(
+			p.f.plan.records.get(p.card.id)!,
+			Store.get(p.f.plan.questions, p.card.id)!,
+		)).toBe(true);
 	});
 });

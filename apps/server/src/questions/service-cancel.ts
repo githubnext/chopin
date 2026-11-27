@@ -110,7 +110,11 @@ async function closeUnanswered(
 				let record = plan.records.get(id);
 				let records = new Map(plan.records);
 				if (record) {
-					records.set(id, { ...record, ...closed });
+					records.set(id, {
+						...record,
+						...closed,
+						lastRevision: claimed.claim.entry.revision,
+					});
 				}
 				let questions: Store.Questions = {
 					open: new Map(plan.questions.open),

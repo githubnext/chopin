@@ -31,6 +31,8 @@ export type AskedInput = { method: InputMethod; decisions: string[] };
 export type HumanInputOptions = HostInputOptions & {
 	block?: { index: number; digest: string };
 	asked?: (decisions: string[]) => void;
+	/** Hears which decisions were already answered if the wait was detached before all settled. */
+	answered?: (decisions: string[]) => void;
 };
 
 /**
@@ -200,9 +202,10 @@ export async function rejoinInput(
 	room: Pick<DocumentRoom, "plan" | "server" | "id">,
 	asked: AskedInput,
 	signal: AbortSignal,
-): Promise<{ status: HumanInputStatus; value: unknown }> {
+): Promise<{ status: HumanInputStatus; value: unknown; answeredDecisions?: string[] }> {
 	let params = paramsOf(room.plan, asked.decisions);
 	let ended = await Questions.rejoin(room.plan, room.server, room.id, asked.decisions, signal);
+	let answeredDecisions = asked.decisions.filter((_, index) => ended[index]?.status === "answered");
 	let result = signal.aborted ? { answers: [], cancelled: true } : resultOf(params, ended);
 	return {
 		status: result.cancelled ? "cancelled" : "answered",
@@ -211,6 +214,7 @@ export async function rejoinInput(
 			result,
 			params.questions[0]?.options.map(option => option.label) ?? [],
 		),
+		...(answeredDecisions.length > 0 ? { answeredDecisions } : {}),
 	};
 }
 
@@ -260,6 +264,7 @@ export function createHumanInput(
 				multiple: question.multiSelect ?? false,
 			})),
 		}, { verbatim: true });
+		let askedIds: string[] = [];
 		let ended = await Questions.ask(
 			room.plan,
 			room.server,
@@ -269,11 +274,14 @@ export function createHumanInput(
 			room.anchors,
 			options.signal,
 			ids => {
+				askedIds = ids;
 				options.asked?.(ids);
 				room.decisionsAsked?.(ids);
 			},
 		);
 		if (options.signal.aborted) {
+			let answered = askedIds.filter((_, index) => ended[index]?.status === "answered");
+			if (answered.length > 0) options.answered?.(answered);
 			report?.("cancelled");
 			return { answers: [], cancelled: true };
 		}

@@ -289,10 +289,10 @@ export class PlannerAttachments {
 
 	/**
 	 * Whether the document's Planner holds work that only an explicit end may take away: its link
-	 * waits on its members, or dropped and left its work kept.
+	 * is actively replying or waiting on its members, or dropped and left its work kept.
 	 */
 	keeping(channelId: string): boolean {
-		return this.waiting(channelId);
+		return this.waiting(channelId) || this.busy(channelId);
 	}
 
 	/** Waits at most `ms` for a client to attach to the document; whether one is attached then. */
@@ -364,6 +364,20 @@ export class PlannerAttachments {
 			if (hold.machineId === machineId && (hold.link || this.#inWindow(hold))) return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Documents whose Planner hold is parked or restored for paired machine `machineId`, so a
+	 * reconnecting connector keeps running their backends even when `inUse` has not seen them yet.
+	 */
+	parkedForMachine(machineId: string): string[] {
+		let documents: string[] = [];
+		for (let hold of this.#holds.values()) {
+			if (hold.machineId === machineId && (hold.parked || hold.restored)) {
+				documents.push(hold.channelId);
+			}
+		}
+		return documents;
 	}
 
 	/**
@@ -483,7 +497,7 @@ export class PlannerAttachments {
 			let hold = this.#holds.get(channelId);
 			if (pending) pending.invalidated ??= documentEndedRefusal();
 			if (!hold) return;
-			this.#invalidate(hold, documentEndedRefusal());
+			this.#invalidate(hold, documentEndedRefusal(), true);
 			await this.#release(hold);
 		});
 	}
@@ -1028,10 +1042,10 @@ export class PlannerAttachments {
 	}
 
 	/** Forgets the hold before its link closes, so closing starts no grace period. */
-	#invalidate(hold: Hold, refusal: AttachRefusal): void {
+	#invalidate(hold: Hold, refusal: AttachRefusal, withdraw = false): void {
 		if (this.#holds.get(hold.channelId) !== hold) return;
-		this.#drop(hold);
-		hold.link?.revoke(refusal.code, refusal.message);
+		this.#drop(hold, withdraw);
+		hold.link?.revoke(refusal.code, refusal.message, withdraw);
 	}
 
 	async #release(hold: Hold): Promise<void> {
@@ -1049,7 +1063,7 @@ export class PlannerAttachments {
 		}
 	}
 
-	#drop(hold: Hold): void {
+	#drop(hold: Hold, withdraw = false): void {
 		clearTimeout(hold.timer);
 		clearTimeout(hold.handoverTimer);
 		hold.timer = undefined;
@@ -1057,7 +1071,7 @@ export class PlannerAttachments {
 		if (this.#holds.get(hold.channelId) !== hold) return;
 		this.#forgetRow(hold);
 		// Whatever a dropped link kept goes with the ownership it rested on.
-		hold.parked?.terminate();
+		hold.parked?.terminate(withdraw);
 		hold.parked = undefined;
 		this.#holds.delete(hold.channelId);
 		this.#changed(hold.channelId);

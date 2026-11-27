@@ -11,6 +11,8 @@ import {
 import { hostInputRoom } from "../../testing/decisions";
 import { createHumanInput } from "../atomic/human-input";
 import { createRemoteAdapter } from "./adapter";
+import * as Store from "../../questions/store";
+import { plannerToActOn } from "../../questions/answer-turns";
 
 import type { AgentHandlers } from "@chopin/agent-link/client";
 import type { RemotePlanner } from "./registry";
@@ -117,9 +119,16 @@ it("settles the questions of a client that another account's hold refuses, and d
 	w.proxy.cut();
 	let resumption = await w.client.resumption;
 	await until(() => w.server.attachments.status(w.channel.id).state === "disconnected", 5_000);
-	// The owner's work was ended on purpose, and another account took the document.
+	// The owner's hold was reset and another account took the document; the waiter detaches
+	// while the open Decision stays in the document for durable handoff.
 	w.server.attachments.ownerReset(w.channel.id);
-	await until(() => w.f.plan.records.get(w.card.id)?.status === "cancelled");
+	await until(() => w.server.attachments.status(w.channel.id).state === "none");
+	expect(w.f.plan.records.get(w.card.id)?.status).toBe("open");
+	expect(Store.get(w.f.plan.questions, w.card.id)?.awaited).toBeUndefined();
+	expect(plannerToActOn(
+		w.f.plan.records.get(w.card.id)!,
+		Store.get(w.f.plan.questions, w.card.id)!,
+	)).toBe(true);
 	let rival = await connectAgent({
 		url: w.server.url,
 		token: RIVAL_TOKEN,

@@ -78,6 +78,7 @@ import { MAX_MESSAGE_BYTES } from "./limits";
 import { actor, alone, contributed } from "./initiative";
 import { checkPlannerReply, publishPlannerReplies } from "./reply-policy";
 import { withSessionContext } from "./session-context";
+import { isPlannerDisconnectedError } from "../harness/remote/link";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { retryTarget } from "./retry";
 import { appendEntries, snapshotSeq, takeOut } from "./chronology";
@@ -946,6 +947,11 @@ export type Room = {
 	tellChat?: TellChat;
 	/** Set only on a thread's room: hears the ids of the Decision cards the thread's Planner asks. */
 	threadAsked?: (ids: string[]) => void;
+	/**
+	 * Decisions answered whose answer could not be delivered directly to the asking client.
+	 * Hands them to the Planner as a turn through `answerTurns`.
+	 */
+	unsentDecisions?: (decisions: string[]) => void;
 	/** Session-tree and remote fork hooks for top-level Chat and threads. */
 	sessionForks?: {
 		/** Resolves once the saved session state is read, before anything of a turn reads or writes it. */
@@ -974,7 +980,7 @@ export type Room = {
 type Retained = {
 	session: PlannerSession;
 	binding: ActiveOwnerBinding;
-	release: () => Promise<void>;
+	release: (options?: { withdraw?: boolean }) => Promise<void>;
 	/** Called when `binding` ends; a rebound session watches its new binding with it. */
 	ended: () => void;
 	/** The rebind under way from a binding that ended, which every caller of `rebindRetained` shares. */
@@ -1080,15 +1086,20 @@ async function rebindRetainedFrom(
 	if (!retained.session.rebind || !credentialRenewed(previous)) return false;
 	let binding = await context.activeOwner?.();
 	if (!binding) return false;
+	let sameOwner = (binding.ownerSessionId === previous.ownerSessionId
+		&& binding.ownerGeneration === previous.ownerGeneration)
+		|| (binding.ownerUserId !== undefined
+			&& binding.ownerUserId === previous.ownerUserId);
 	if (
-		binding.ownerSessionId !== previous.ownerSessionId
-		|| binding.ownerGeneration !== previous.ownerGeneration
+		!sameOwner
 		|| binding.repository.id !== previous.repository.id
+		|| binding.signal.aborted
 		|| context.chat.retained !== retained
 	) {
 		binding.release();
 		return false;
 	}
+	previous.signal.removeEventListener("abort", retained.ended);
 	retained.session.rebind(binding);
 	retained.binding = binding;
 	previous.release();
@@ -2326,7 +2337,7 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 	if (!turn) {
 		// A Planner that only waits on a question it asked has nothing else to stop: Stop withdraws it.
 		if (chat.retained && chat.retained.session.inputs?.open()) {
-			await chat.retained.release();
+			await chat.retained.release({ withdraw: true });
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
@@ -2390,8 +2401,9 @@ function retain(
 		let retained: Retained = {
 			...opened,
 			ended: () => {},
-			release: () =>
-				released ??= (async () => {
+			release: options => {
+				if (options?.withdraw) opened.session.withdrawInputs?.();
+				return released ??= (async () => {
 					if (chat.retained === retained) chat.retained = undefined;
 					stopInputs?.();
 					retained.binding.signal.removeEventListener("abort", ended);
@@ -2405,9 +2417,11 @@ function retain(
 							if (!chat.busy) chat.owner = undefined;
 						}
 					}
-				})(),
+				})();
+			},
 		};
 		let ended = () => {
+			if (!retained.binding.signal.aborted) return;
 			// A Planner whose client is away keeps its work through a renewed credential, however
 			// long that is; its session takes the renewed one when it is next used.
 			if (opened.session.suspended?.() && credentialRenewed(retained.binding)) return;
@@ -2470,6 +2484,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		children: context.children,
 		turnSignal: () => chat.turnController?.signal,
 		...(context.threadAsked && { decisionsAsked: context.threadAsked }),
+		...(context.unsentDecisions && { unsentDecisions: context.unsentDecisions }),
 		...((!chat.job || chat.job.kind === "decision-followup") && context.visualAdmission && {
 			visualAdmission: input => {
 				let signals = [input.signal, chat.turnController?.signal].filter(
@@ -3370,18 +3385,19 @@ async function run(
 				};
 		} else if (!chat.closed && failed && !opened?.session.shuttingDown?.()) {
 			let suspended = !!opened?.session.suspended?.();
+			let dropped = suspended || isPlannerDisconnectedError(err);
 			// Read before `chat.interruption` is cleared below.
 			let failure = turnFailureOf({
 				error: err,
 				interruption: chat.interruption,
-				suspended,
+				suspended: dropped,
 				request: chat.activeRequest?.entryId,
 				focus: chat.focus?.channelId,
 			});
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: suspended
+				text: dropped
 					? "The machine's connection dropped during this reply. Its open questions are kept; "
 						+ "ask again once it has reconnected."
 					: failure.kind === "tool"

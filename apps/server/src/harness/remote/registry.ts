@@ -18,6 +18,13 @@ export type RemotePlanner =
 		 */
 		holdInput?: () => () => void;
 		/**
+		 * Decisions answered whose answer could not be delivered directly to the asking client
+		 * (for example because the link detached or abandoned before acknowledgement).
+		 */
+		unsentDecisions?: (decisions: string[]) => void;
+		/** Explicitly withdraws open questions held by this session (as when a person clicks Stop). */
+		withdrawInputs?: () => void;
+		/**
 		 * The client's link dropped unexpectedly and the session waits for it to resume: nothing
 		 * it holds has ended, but nothing can reach it either.
 		 */

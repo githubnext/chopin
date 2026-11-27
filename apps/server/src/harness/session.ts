@@ -148,6 +148,8 @@ export type PlannerSession = {
 	shuttingDown?: () => boolean;
 	/** Takes the binding of the owner's renewed credential in place of one that ended. */
 	rebind?: (owner: ActiveOwnerBinding) => void;
+	/** Explicitly withdraws open questions held by this session (as when a person clicks Stop). */
+	withdrawInputs?: () => void;
 };
 
 export type PlannerSessionDependencies = {
@@ -254,6 +256,9 @@ export async function openPlannerSession(
 			if (!isolated) {
 				held.humanInput = report => createHumanInput(channel.room, report, inputs);
 				held.holdInput = () => inputs.hold();
+				if (channel.room.unsentDecisions) {
+					held.unsentDecisions = channel.room.unsentDecisions;
+				}
 				held.toolReport = (id, output, state) => {
 					let chat = channel.chat ?? channel.room.plan.chat;
 					if (state === "running") chat?.toolProgress?.(id, output);
@@ -336,6 +341,7 @@ export async function openPlannerSession(
 						},
 						suspended: () => remote.suspended === true,
 						shuttingDown: () => remote.stopping === true,
+						withdrawInputs: () => remote.withdrawInputs?.(),
 					}
 					: {}),
 				stream: (prompt, abortSignal, choice, files, message, context) => {
