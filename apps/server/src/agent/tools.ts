@@ -387,12 +387,15 @@ export const documentTools = {
 			+ "Decisions and Planner. `open` creates several at once, each exactly as "
 			+ "`create_document` would, remembered as created from this document. `list` gives each "
 			+ "one's link, whether its Planner is working, idle or stopped, its open Decisions and "
-			+ "its build. `instruct` sends one instruction to their Planners, or only to `targets`, "
-			+ "as the person's message in each document's Chat, starting a Planner that isn't "
-			+ "running; use it when the person asks to resume, continue or change the work in them. "
-			+ "`index` writes a table of them, kept current by later calls, under its own heading in "
-			+ "this document. Only a turn a person asked for can use it, and it reaches only the "
-			+ "documents this one created.",
+			+ "its build. `decisions` reads decisions across created documents with optional "
+			+ "status/origin filters. `answer` settles one decision on a created `target` document "
+			+ "with revision fencing and an idempotencyKey, handing saved answers to that document's "
+			+ "Planner. `instruct` sends one instruction to their Planners, or only to `targets`, "
+			+ "as the person's message in each document's Chat—starting stopped Planners and "
+			+ "steering/nudging live working Planners when supported. `build` starts builds (drafting "
+			+ "tasks first when needed) across created documents. `index` writes a table of them, "
+			+ "kept current by later calls, under its own heading in this document. Only a turn a "
+			+ "person asked for can use it, and it reaches only the documents this one created.",
 		inputSchema: jsonSchema(ORCHESTRATE_SCHEMA),
 		execute: (raw, { context: { room: context }, abortSignal }) =>
 			answer("orchestrate", async () => {

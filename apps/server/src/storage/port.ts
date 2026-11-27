@@ -56,6 +56,7 @@ import type {
 	MachineRepository,
 	MachineVmProblem,
 	McpInvocation,
+	McpInvocationResult,
 	McpInvocationScope,
 	McpSession,
 	PauseBackgroundJob,
@@ -700,11 +701,15 @@ export interface McpInvocationStore {
 		lease: Lease,
 		invocation: Omit<McpInvocation, "invokedAt" | "uncertainAt">,
 	): Promise<{ record: McpInvocation; claimed: boolean }>;
-	/** Marks the claim naming `entryId` invoked at `at`; false when no such claim waits for it. */
+	/**
+	 * Marks the claim naming `entryId` invoked at `at`, optionally updating its stored `result`
+	 * atomically; false when no such claim waits for it.
+	 */
 	complete(
 		lease: Lease,
 		scope: McpInvocationScope & { entryId: string },
 		at: Date,
+		result?: McpInvocationResult,
 	): Promise<boolean>;
 	/** Marks the claim naming `entryId` uncertain at `at`; false when no such claim waits for it. */
 	uncertain(

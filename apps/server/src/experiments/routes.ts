@@ -2097,11 +2097,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						throw error;
 					}
 				},
-				// A Planner serves its document and the document's children; a run, its document.
+				// A Planner serves its document, its direct children, and direct same-repo top-level
+				// documents created from it (non-transitive); a run serves only its document.
 				allows: value =>
 					value.repositoryId === channel.repositoryId
 					&& (value.id === documentId
-						|| (launch.kind === "planner" && value.parentChannelId === documentId)),
+						|| (launch.kind === "planner"
+							&& (value.parentChannelId === documentId
+								|| (!value.parentChannelId && value.createdFrom === documentId)))),
 			},
 		};
 	}

@@ -28,6 +28,10 @@ export type Version = {
 	planRevision: number;
 	state: State;
 	definition: Definition;
+	/** Who approved this version, when recorded (for example, through build_plan). */
+	approvedBy?: string;
+	/** Caller-supplied idempotency or operation key recorded at approval. */
+	operationKey?: string;
 };
 
 export type Graph = {
@@ -385,22 +389,40 @@ function revise(definition: Definition, operations: unknown[]): Result<Definitio
 	return validate(next);
 }
 
+function boundedString(value: unknown, max: number): string | undefined {
+	return typeof value === "string" && value.trim().length > 0 && Array.from(value).length <= max
+		? value
+		: undefined;
+}
+
 /** Read a graph back from a sidecar without trusting handwritten JSON. */
 export function restore(value: unknown): Graph | undefined {
 	let stored = item(value, ["versions"]);
 	if (!stored || !Array.isArray(stored.versions) || stored.versions.length === 0) return undefined;
+	let optionalKeys = new Set(["revision", "approvedBy", "operationKey"]);
+	let requiredKeys = ["definition", "number", "planRevision", "state"];
 	let versions: Version[] = [];
 	for (let [index, value] of stored.versions.entries()) {
-		let version = item(value, ["definition", "number", "planRevision", "revision", "state"])
-			?? item(value, ["definition", "number", "planRevision", "state"]);
-		let checked = version && definition(version.definition);
-		let number = version?.number;
-		let revision = version?.revision ?? 1;
-		let planRevision = version?.planRevision;
-		let versionState = state(version?.state);
+		if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+		let version = value as Record<string, unknown>;
+		let keys = Object.keys(version);
 		if (
-			!version
-			|| typeof number !== "number"
+			requiredKeys.some(key => !Object.hasOwn(version, key))
+			|| keys.some(key => !requiredKeys.includes(key) && !optionalKeys.has(key))
+		) return undefined;
+		let checked = definition(version.definition);
+		let number = version.number;
+		let revision = version.revision ?? 1;
+		let planRevision = version.planRevision;
+		let versionState = state(version.state);
+		let approvedBy = Object.hasOwn(version, "approvedBy")
+			? boundedString(version.approvedBy, 128)
+			: undefined;
+		let operationKey = Object.hasOwn(version, "operationKey")
+			? boundedString(version.operationKey, 128)
+			: undefined;
+		if (
+			typeof number !== "number"
 			|| number !== index + 1
 			|| typeof revision !== "number"
 			|| !Number.isInteger(revision)
@@ -410,6 +432,8 @@ export function restore(value: unknown): Graph | undefined {
 			|| planRevision < 0
 			|| !versionState
 			|| !checked
+			|| (Object.hasOwn(version, "approvedBy") && !approvedBy)
+			|| (Object.hasOwn(version, "operationKey") && !operationKey)
 		) return undefined;
 		versions.push({
 			number,
@@ -417,6 +441,8 @@ export function restore(value: unknown): Graph | undefined {
 			planRevision,
 			state: versionState,
 			definition: checked,
+			...(approvedBy ? { approvedBy } : {}),
+			...(operationKey ? { operationKey } : {}),
 		});
 	}
 	return history(versions) ? { versions } : undefined;
@@ -518,7 +544,17 @@ export class Graphs<Document> {
 }
 
 export function approveGraph(
-	{ graph, revision }: { graph?: Graph; revision?: number },
+	{
+		graph,
+		revision,
+		approvedBy,
+		operationKey,
+	}: {
+		graph?: Graph;
+		revision?: number;
+		approvedBy?: string;
+		operationKey?: string;
+	},
 ): Result<Graph> {
 	graph = graph ? copy(graph) : undefined;
 	let version = graph && current(graph);
@@ -536,6 +572,8 @@ export function approveGraph(
 		...graph.versions[graph.versions.length - 1],
 		state: "approved",
 		definition: checked.value,
+		...(approvedBy ? { approvedBy } : {}),
+		...(operationKey ? { operationKey } : {}),
 	};
 	return { ok: true, value: graph };
 }

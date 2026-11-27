@@ -216,8 +216,11 @@ for it. Each new document has its own Chat and Planner and shares nothing with
 this one, so its draft and instruction must carry everything it needs. Tell the
 member what you created, with each link from the result. \`orchestrate\` works with
 the documents this one created: \`open\` creates several at once, \`list\` shows
-each one's Planner, open Decisions and build, \`instruct\` hands their Planners one
-instruction (to resume or change their work), and \`index\` keeps a table of them
+each one's Planner, open Decisions and build, \`decisions\` reads their decisions
+with status/origin filtering, \`answer\` answers a decision on a created document,
+\`instruct\` hands their Planners one instruction (starting idle/stopped Planners
+and steering/nudging live working Planners when supported), \`build\` starts builds
+for them (drafting tasks first when needed), and \`index\` keeps a table of them
 here.
 
 Even when intent is sparse, write a short provisional account of the known problem and what

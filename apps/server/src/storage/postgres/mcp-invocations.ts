@@ -73,19 +73,33 @@ export class PostgresMcpInvocationStore implements McpInvocationStore {
 				}),
 		);
 	}
-	complete(lease: Lease, scope: McpInvocationScope & { entryId: string }, at: Date) {
+	complete(
+		lease: Lease,
+		scope: McpInvocationScope & { entryId: string },
+		at: Date,
+		result?: McpInvocationResult,
+	) {
 		return this.run(
 			"mark an invoke_planner call invoked",
 			() =>
 				this.sql.begin(async transaction => {
 					await this.fence(transaction, lease);
-					let completed = await transaction<{ key: string }[]>`
-					UPDATE mcp_invocations SET invoked_at = ${at}
-					WHERE user_id = ${scope.userId} AND channel_id = ${scope.channelId}
-						AND key = ${scope.key} AND entry_id = ${scope.entryId} AND invoked_at IS NULL
-						AND uncertain_at IS NULL
-					RETURNING key
-				`;
+					let completed = result === undefined
+						? await transaction<{ key: string }[]>`
+							UPDATE mcp_invocations SET invoked_at = ${at}
+							WHERE user_id = ${scope.userId} AND channel_id = ${scope.channelId}
+								AND key = ${scope.key} AND entry_id = ${scope.entryId} AND invoked_at IS NULL
+								AND uncertain_at IS NULL
+							RETURNING key
+						`
+						: await transaction<{ key: string }[]>`
+							UPDATE mcp_invocations
+							SET invoked_at = ${at}, result = ${JSON.stringify(result)}::text::jsonb
+							WHERE user_id = ${scope.userId} AND channel_id = ${scope.channelId}
+								AND key = ${scope.key} AND entry_id = ${scope.entryId} AND invoked_at IS NULL
+								AND uncertain_at IS NULL
+							RETURNING key
+						`;
 					return completed.length > 0;
 				}),
 		);

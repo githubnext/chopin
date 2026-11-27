@@ -140,10 +140,15 @@ durable.
   App installation and repository role.
 - **MCP has a different credential boundary.** `/mcp` checks its caller-supplied
   GitHub bearer directly, does not require the App installation, and can mutate
-  data for callers with push or administration access. Work on a paired machine
+  data for callers with push or administration access (including
+  `answer_decision`, `build_plan`, and `orchestrate`). Work on a paired machine
   instead presents an MCP token minted from its launch's credential, limited to
-  that launch's documents and life (`experiments/mcp-token.ts`); `/mcp` never
-  takes a GitHub App installation token or a launch's own Planner or run credential.
+  that launch's documents and life (`experiments/mcp-token.ts`): a Planner
+  launch token reaches its document, direct children, and direct same-repo
+  top-level `createdFrom` documents (non-transitive, and never creates new
+  documents over `/mcp`), while a run token reaches its own document alone;
+  `/mcp` never takes a GitHub App installation token or a launch's own Planner
+  or run credential.
 - **AI credentials stay in Chopin.** A person's connected AI keys
   (`ai_credentials`, encrypted) are never returned by any route. A launch holds
   random per-provider placeholders and a launch credential its runner keeps from
@@ -681,26 +686,38 @@ it.
 
 Each created document records its parent in `ChannelRecord.createdFrom`
 (migration 054; cleared when the parent is deleted, keeping the child). The
-Planner's `orchestrate` host tool (`apps/server/src/agent/orchestrate.ts`,
-`orchestrate-index.ts`) is offered under the same permissions and reaches only
-unarchived top-level documents in the same repository whose `createdFrom` is
-this document:
+`orchestrate` abstraction (`apps/server/src/agent/orchestrate.ts`,
+`orchestrate-index.ts`) is offered both as a Planner host tool (under the same
+member-turn permissions as `create_document`) and as an MCP tool on `/mcp`, and
+reaches only unarchived top-level documents in the same repository whose
+`createdFrom` is this document:
 
 - `open`: creates up to 20 documents at once, each with `create_document`
-  semantics.
+  semantics (forbidden under launch MCP tokens).
 - `list`: returns each created document's link, Planner state (`working`,
   `idle`, `stopped`), open Decisions count, and build state.
+- `decisions`: reads filtered decision snapshots and document-wide counts across
+  all or named (`targets`) created documents (`readDecisions` in
+  `apps/server/src/questions/read-decisions.ts`, shared with MCP `read_document`).
+- `answer`: settles one open or reopened decision on a created `target` document
+  through the shared atomic `answerDecision` core (`service-submit.ts` + durable
+  idempotency in `mcp/decisions.ts`), with full Planner handoff parity.
 - `instruct`: posts one instruction as the person's message to all or named
-  (`targets`) created documents, starting stopped Planners.
+  (`targets`) created documents, starting stopped Planners and steering/nudging
+  live working Planners (`steered: true`) when supported.
+- `build`: starts (or drafts-then-starts, retries, or rebuilds) created
+  documents through the shared `startPlanBuild` core (`tasks/start-build.ts`,
+  shared with browser routes and MCP `build_plan`).
 - `index`: writes or updates a table under `## Documents created from this one`
-  (`open` and `list` refresh an existing table; unchanged tables are not
-  rewritten).
+  (`open`, `list`, `answer`, and `build` refresh an existing table; unchanged
+  tables are not rewritten).
 
 Limits: documents created before migration 054 have no `createdFrom` link and
 are invisible to `orchestrate`; the index refreshes only when `open`, `list`,
-or `index` runs; `list`, `instruct`, and `index` cover up to 200 created
-documents. See
-[Creating documents](docs/hosted-agent.md#creating-documents).
+`answer`, `build`, or `index` runs; `list`, `decisions`, `instruct`, `build`,
+and `index` cover up to 200 created documents. See
+[Creating documents](docs/hosted-agent.md#creating-documents) and
+[Connect a local coding agent](docs/local-agent-mcp.md#orchestrating-created-documents-with-orchestrate).
 
 ## Research requests and child documents
 

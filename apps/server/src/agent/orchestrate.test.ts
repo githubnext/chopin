@@ -141,6 +141,51 @@ describe("orchestrate arguments", () => {
 			operation: "instruct",
 			instruction: "Resume.",
 		});
+		expect(
+			orchestrateArguments({
+				operation: "decisions",
+				status: ["open", "reopened"],
+				origin: "planner",
+			}),
+		).toEqual({
+			operation: "decisions",
+			status: ["open", "reopened"],
+			origin: "planner",
+		});
+		expect(
+			orchestrateArguments({
+				operation: "answer",
+				target: "doc-1",
+				decisionId: "card-1",
+				revision: 0,
+				idempotencyKey: "ans-1",
+				optionIds: ["opt-1"],
+			}),
+		).toEqual({
+			operation: "answer",
+			target: "doc-1",
+			decisionId: "card-1",
+			revision: 0,
+			idempotencyKey: "ans-1",
+			optionIds: ["opt-1"],
+		});
+		expect(
+			orchestrateArguments({
+				operation: "build",
+				targets: ["doc-1"],
+				draftIfNeeded: false,
+				requireSettledDecisions: true,
+				retry: true,
+				rebuild: false,
+			}),
+		).toEqual({
+			operation: "build",
+			targets: ["doc-1"],
+			draftIfNeeded: false,
+			requireSettledDecisions: true,
+			retry: true,
+			rebuild: false,
+		});
 		expect(() => orchestrateArguments({ operation: "list", instruction: "Resume." })).toThrow(
 			"orchestrate list does not take `instruction`",
 		);
@@ -148,6 +193,13 @@ describe("orchestrate arguments", () => {
 		expect(() => orchestrateArguments({ operation: "instruct" })).toThrow("instruction");
 		expect(() => orchestrateArguments({ operation: "instruct", instruction: "Go.", targets: [] }))
 			.toThrow("targets");
+		expect(() => orchestrateArguments({ operation: "decisions", status: "bogus" })).toThrow(
+			"status",
+		);
+		expect(() => orchestrateArguments({ operation: "answer", decisionId: "c1" })).toThrow(
+			"target",
+		);
+		expect(() => orchestrateArguments({ operation: "build", retry: "yes" })).toThrow("boolean");
 	});
 
 	test("open checks every document as create_document does, and needs distinct keys", () => {
@@ -312,6 +364,179 @@ describe("orchestrate", () => {
 		let result = await context.call({ operation: "index" });
 		expect(result).toMatchObject({ ok: true, operation: "index", index: { state: "written" } });
 		expect(context.indexed.at(-1)).toMatchObject({ create: true, documents: [{ title: "Login" }] });
+	});
+
+	test("instruct marks steered: true when nudging a live working Planner", async () => {
+		let context = await fixture();
+		let [login, checkout] = await context.open(
+			piece("login-page", "Login"),
+			piece("checkout-flow", "Checkout"),
+		);
+		context.planners.set(login!.id, "working");
+		context.planners.set(checkout!.id, "stopped");
+		let result = await context.call({ operation: "instruct", instruction: "Add rate limiting." });
+		if (!result.ok || result.operation !== "instruct") throw new Error("instruct failed");
+		expect(byTitle(result.documents)).toEqual([
+			{ id: checkout!.id, title: "Checkout", url: checkout!.url, started: true },
+			{ id: login!.id, title: "Login", url: login!.url, started: true, steered: true },
+		]);
+	});
+
+	test("decisions, answer, and build coordinate created documents and enforce provenance containment", async () => {
+		let context = await fixture();
+		let [login, checkout] = await context.open(
+			piece("login-page", "Login"),
+			piece("checkout-flow", "Checkout"),
+		);
+		let stranger = await context.storage.channels.create({
+			...context.fields,
+			id: crypto.randomUUID(),
+			title: "Unrelated doc",
+		});
+		let grandchild = await context.storage.channels.create({
+			...context.fields,
+			id: crypto.randomUUID(),
+			title: "Grandchild doc",
+			createdFrom: login!.id,
+		});
+
+		let answeredCalls: string[] = [];
+		let builtCalls: string[] = [];
+		context.deps.decisions = async channelId => ({
+			decisions: channelId === login!.id
+				? [{
+					id: "card-login",
+					status: "open",
+					origin: "planner",
+					revision: 0,
+					paused: false,
+					draftInProgress: false,
+					questions: [],
+					historyCount: 0,
+				}]
+				: [],
+			decisionCounts: {
+				open: channelId === login!.id ? 1 : 0,
+				reopened: 0,
+				answered: 0,
+				discarded: 0,
+				cancelled: 0,
+				expired: 0,
+				total: channelId === login!.id ? 1 : 0,
+			},
+		});
+		context.deps.answerDecision = async input => {
+			answeredCalls.push(`${input.channel.id}:${input.decisionId}`);
+			return {
+				kind: "answered",
+				result: {
+					status: "answered",
+					replayed: false,
+					decisionId: input.decisionId,
+					committedAt: 1000,
+					resolver: input.user.login,
+					answers: { q1: "Yes" },
+					decision: {
+						id: input.decisionId,
+						status: "answered",
+						origin: "planner",
+						revision: 0,
+						paused: false,
+						draftInProgress: false,
+						questions: [],
+						historyCount: 0,
+					},
+				},
+			};
+		};
+		context.deps.startBuild = async input => {
+			builtCalls.push(input.channel.id);
+			return input.channel.id === login!.id
+				? { status: "drafting", planRevision: 0 }
+				: { status: "refused", code: "no-workspace", message: "No machine online." };
+		};
+
+		// decisions: respects targets and names non-created/grandchild in unknown
+		let decs = await context.call({
+			operation: "decisions",
+			targets: [login!.id, stranger.id, grandchild.id],
+			status: "open",
+		});
+		expect(decs).toMatchObject({
+			ok: true,
+			operation: "decisions",
+			documents: [{
+				id: login!.id,
+				decisions: [{ id: "card-login" }],
+				decisionCounts: { open: 1 },
+			}],
+			unknown: [stranger.id, grandchild.id],
+		});
+
+		// answer: succeeds for direct created doc, refuses stranger and grandchild!
+		let answered = await context.call({
+			operation: "answer",
+			target: login!.url,
+			decisionId: "card-login",
+			revision: 0,
+			idempotencyKey: "k-1",
+			optionIds: ["opt-1"],
+		});
+		expect(answered).toMatchObject({
+			ok: true,
+			operation: "answer",
+			target: { id: login!.id },
+			status: "answered",
+			decisionId: "card-login",
+		});
+		expect(answeredCalls).toEqual([`${login!.id}:card-login`]);
+
+		expect(
+			await context.call({
+				operation: "answer",
+				target: stranger.id,
+				decisionId: "card-1",
+				revision: 0,
+				idempotencyKey: "k-2",
+				optionIds: ["opt-1"],
+			}),
+		).toMatchObject({ ok: false, reason: "target-not-created" });
+		expect(
+			await context.call({
+				operation: "answer",
+				target: grandchild.id,
+				decisionId: "card-1",
+				revision: 0,
+				idempotencyKey: "k-3",
+				optionIds: ["opt-1"],
+			}),
+		).toMatchObject({ ok: false, reason: "target-not-created" });
+
+		// build: runs on created docs only, reports drafting + refused + unknown
+		let built = await context.call({
+			operation: "build",
+			targets: [login!.id, checkout!.id, grandchild.id],
+		});
+		if (!built.ok || built.operation !== "build") throw new Error("build failed");
+		expect(byTitle(built.documents)).toEqual([
+			{
+				id: checkout!.id,
+				title: "Checkout",
+				url: checkout!.url,
+				status: "refused",
+				reason: "no-workspace",
+				message: "No machine online.",
+			},
+			{
+				id: login!.id,
+				title: "Login",
+				url: login!.url,
+				status: "drafting",
+				planRevision: 0,
+			},
+		]);
+		expect(built.unknown).toEqual([grandchild.id]);
+		expect(builtCalls.sort()).toEqual([login!.id, checkout!.id].sort());
 	});
 });
 

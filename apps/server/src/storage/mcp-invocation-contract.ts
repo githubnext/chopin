@@ -108,6 +108,17 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 					...second,
 					invokedAt: INVOKED_AT,
 				});
+
+				let third = invocation({ userId, channelId }, { key: "answer-decision-1", result: {} });
+				await storage.mcpInvocations.claim(lease, third);
+				let settledResult = { status: "answered", decisionId: "card-1", committedAt: 1234 };
+				expect(await storage.mcpInvocations.complete(lease, third, INVOKED_AT, settledResult))
+					.toBe(true);
+				expect(await storage.mcpInvocations.get(third)).toEqual({
+					...third,
+					result: settledResult,
+					invokedAt: INVOKED_AT,
+				});
 			} finally {
 				await storage.close();
 			}

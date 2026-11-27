@@ -45,7 +45,11 @@ the configured Chopin origin.
 The current MCP contract can:
 
 - list and read active or archived Chopin documents, including an optional
-  generated description, for the current repository;
+  generated description and optional filtered decision snapshots (`decisions`
+  and `decisionCounts`), for the current repository;
+- answer open or reopened decisions atomically with `answer_decision`, sharing
+  the browser UI's validation, projection, persistence, broadcast, and Planner
+  handoff core;
 - create one document from a structured brief, canonical source supplied through
   the current `plan` input, and caller-supplied repository provenance;
 - replace that canonical source later with `update_document`, naming the plan
@@ -53,7 +57,11 @@ The current MCP contract can:
 - rename, archive, and restore documents without deleting their durable state;
 - upload a PNG, JPEG, WebP, or GIF image to a document with `upload_image` and
   reference its returned path from the document source;
-- read an approved implementation graph and its document source; and
+- start, draft-then-start, retry, or rebuild a document's implementation on a
+  paired machine with `build_plan`;
+- coordinate multiple top-level documents created from a source document
+  (`createdFrom`) with `orchestrate`;
+- read an approved implementation graph and its document source;
 - claim a graph and report task, pull-request, blocker, revision, and
   verification lifecycle transitions; and
 - hand an instruction to a document's Planner with `invoke_planner`, described
@@ -314,6 +322,239 @@ in the text; `structuredContent.brief` has all of it. An `offset` or `column`
 outside the document is a JSON-RPC invalid-params error. See
 [Reading a large document](hosted-agent.md#reading-a-large-document).
 
+## Reading decisions with `read_document`
+
+By default, `read_document` returns only the document metadata, optional brief,
+and Markdown source. Pass any of these optional arguments to also inspect the
+document's decisions (works on both live in-memory rooms and unloaded stored
+documents):
+
+- `includeDecisions`: `true` includes `decisions` and `decisionCounts` in
+  `structuredContent` and adds a concise `Decisions:` section to the text output.
+- `decisionStatus`: `"all"`, a single status (`"open"`, `"reopened"`,
+  `"answered"`, `"discarded"`, `"cancelled"`, or `"expired"`), or a non-empty
+  array of statuses. Implies `includeDecisions: true`.
+- `decisionOrigin`: `"planner"`, `"conversation"`, or `"human"`. Implies
+  `includeDecisions: true`.
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"decisionStatus": ["open", "reopened"],
+	"decisionOrigin": "planner"
+}
+```
+
+When decision reading is requested, `structuredContent` adds:
+
+- `decisionCounts`: document-wide totals across all statuses (`open`,
+  `reopened`, `answered`, `discarded`, `cancelled`, `expired`, `total`),
+  unaffected by `decisionStatus` or `decisionOrigin` filters.
+- `decisions`: matching decision snapshots, each containing:
+  - `id`: decision card ID
+  - `status`: current status
+  - `origin`: `"planner" | "conversation" | "human"`
+  - `revision`: live open draft revision (use this value with `answer_decision`)
+  - `paused`: `true` when settlement is paused pending verification
+  - `draftInProgress`: `true` when a collaborator has unsaved edits in the shared
+    draft (choice selection, text typing, or criteria marks)
+  - `questions`: array of `{ id, header, question, description?, multiple, response?, options: [{ id, label, description?, preview? }] }`
+  - `settled` (when `status === "answered"`): `{ by, at, answers, optionIds, why? }`
+  - `previous` (when `historyCount > 0`): latest prior settlement preserved across
+    reopen (`{ by, at, answers, optionIds, why? }`)
+  - `historyCount`: number of previous settlements recorded on the card
+
+## Answering decisions with `answer_decision`
+
+`answer_decision` settles an open or reopened decision through the same atomic
+validation, document projection, durable commit, room broadcast, and Planner
+handoff core as pressing **Save** in the browser. It requires repository push or
+admin access and works on both live rooms and unloaded documents.
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"decisionId": "01J...card-or-question-id...",
+	"revision": 0,
+	"idempotencyKey": "settle-db-choice-1",
+	"optionIds": ["01J...option-id..."]
+}
+```
+
+Arguments:
+
+- `id` (required): document UUID or canonical URL.
+- `decisionId` (required): either the decision card ID or any question ID inside
+  the card.
+- `revision` (required): non-negative integer open draft revision from
+  `read_document`.
+- `idempotencyKey` (required): nonblank caller key of at most 128 characters,
+  scoped per caller and document.
+- Answer payload (provide either flat fields for a single-question card or
+  `answers` keyed by question ID for multi-question or single-question cards):
+  - `optionIds`: array of selected option IDs for choice questions.
+  - `text`: written answer text for `response: "text"` questions.
+  - `answers`: `{ "<questionId>": { "optionIds": [...], "text": "..." } }`.
+
+Successful response:
+
+```json
+{
+	"status": "answered",
+	"replayed": false,
+	"decisionId": "01J...card-id...",
+	"committedAt": 1795770222,
+	"resolver": "octocat",
+	"answers": { "01J...question-id...": "PostgreSQL" },
+	"decision": { "...": "updated DecisionSnapshot" }
+}
+```
+
+Idempotency and Planner parity:
+
+- Repeating the exact same `(idempotencyKey, payload)` returns the original
+  settled result with `replayed: true` and the original `committedAt`, without
+  mutating state or firing a duplicate Planner handoff—even if the decision was
+  later reopened, paused, locked, or archived.
+- Reusing the same `idempotencyKey` with a different payload returns
+  `idempotency-conflict` with zero state mutation.
+- Refusals that mutate nothing release the key so the caller can correct the
+  request and retry with the same key.
+- Answering an unawaited Planner decision schedules the same durable Planner
+  follow-up turn as saving in the browser; answering a blocking `ask` resolves
+  its waiting turn directly without starting a second turn.
+
+Refusal codes (`isError: true`):
+
+- `idempotency-conflict`: key already used for a different payload.
+- `unknown-decision`: no card or question in the document matches `decisionId`.
+- `implementation-active`: an active build or run locks the document.
+- `paused`: decision settlement is paused pending verification.
+- `already-settled`: card is already closed (`status`, optional `resolver`).
+- `state-diverged`: open record is missing its collaborative draft.
+- `stale`: draft moved on (`currentRevision` included; re-read and retry).
+- `draft-in-progress`: a collaborator has unsaved draft edits
+  (`currentRevision` included); external callers never silently overwrite an
+  active human draft.
+- `invalid-answer`: answer failed validation (`message` explains why).
+- `document-archived`, `repository-forbidden`, `document-unavailable`.
+
+## Starting builds with `build_plan`
+
+`build_plan` starts (or drafts-then-starts, retries, or rebuilds) a top-level
+document's build on a paired machine using the same admission and dispatch core
+as the browser's **Build plan**, **Build**, and **Retry** controls. It requires
+repository push or admin access and records optional approval provenance
+(`approvedBy` and `operationKey`) on the approved graph version.
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"idempotencyKey": "release-build-1",
+	"planRevision": 4,
+	"requireSettledDecisions": true,
+	"draftIfNeeded": true
+}
+```
+
+Arguments:
+
+- `id` (required): top-level document UUID or canonical URL.
+- `idempotencyKey`: optional nonblank key (1–128 chars) recorded on graph
+  approval as `operationKey`.
+- `planRevision`: optional optimistic concurrency fence; mismatched revisions
+  return `revision-conflict` with the current `revision`.
+- `requireSettledDecisions` (default `false`): matches browser Build parity by
+  default (open decisions do not block and are passed to the builder as
+  `unapprovedDecisions`). Set `true` to refuse with `open-decisions` if any
+  decision is `open` or `reopened`.
+- `draftIfNeeded` (default `true`): when no graph exists for the current
+  revision, asks the Planner to draft tasks, records a pending build request,
+  and automatically queues the build once a current graph commits (clearing the
+  pending request if drafting fails, stops without saving a graph, or hits a
+  refusal). If the Planner is already busy mid-turn (for example, a Planner
+  calling `build_plan` before drafting), returns `graph-required` or
+  `graph-stale` instructing it to call `edit_implementation_graph` first. Set
+  `false` to refuse immediately without drafting.
+- `retry` (default `false`): set `true` to retry a failed or stopped build at
+  the same revision; without it, an ended build for the current graph returns
+  `retry-required`.
+- `rebuild` (default `false`): set `true` to queue a rebuild of newer edits on a
+  document that already has a delivered live build.
+
+Success responses:
+
+- `{ "status": "started", "build": { ... } }`: queued a new build.
+- `{ "status": "already-building", "build": { ... } }`: idempotent match for an
+  active build owned by the caller at the requested revision.
+- `{ "status": "drafting", "planRevision": 4 }`: Planner task-drafting turn
+  started; Chopin will auto-queue the build once the current graph is saved.
+- `{ "status": "rebuilding", "build": { ... } }`: queued a living-document
+  rebuild.
+
+Refusal codes (`isError: true`): `child-document`, `implementation-active`,
+`revision-conflict` (`revision`), `open-decisions` (`openDecisions`),
+`not-ready` (`blockers`), `graph-required`, `graph-stale` (`planRevision`,
+optional `message`), `retry-required` (`build`), `already-built`,
+`nothing-to-build`, `agent-busy`, `no-workspace`, `machine-offline`,
+`machine-unavailable`, `machine-choice-unavailable`, `plan-source-unavailable`,
+`planner-not-attached`, `planner-unavailable`, `document-archived`,
+`repository-forbidden`, `document-unavailable`.
+
+## Orchestrating created documents with `orchestrate`
+
+`orchestrate` coordinates top-level documents created from a source document
+(`createdFrom`), using the same domain logic and containment rules as the
+Planner's host `orchestrate` tool. It reaches only direct, unarchived,
+same-repository, top-level documents whose `createdFrom` equals the source
+document `id` (never grandchildren, child documents, archived documents, or
+documents from other repositories).
+
+Pass `id` (the source document UUID or canonical URL), `operation`, and that
+operation's fields:
+
+- `open`: create up to 20 linked top-level documents (`documents`, each with
+  `idempotencyKey`, `title`, `brief`, `document`, and optional `instruction`).
+  Refreshes an existing index table. Not permitted under a launch MCP token.
+- `list`: list created documents with `id`, `title`, `url`, `planner`
+  (`working` | `idle` | `stopped`), `openDecisions`, and `build` (`not built` |
+  `building` | `built` | `failed` | `stopped`). Pull access is sufficient.
+- `decisions`: read decisions across all or named (`targets`) created documents
+  with optional `status` (default `"all"`) and `origin` filters. Pull access is
+  sufficient.
+- `answer`: settle one decision on a created `target` document (`target`,
+  `decisionId`, `revision`, `idempotencyKey`, plus `optionIds`/`text`/`answers`)
+  through the shared `answer_decision` core with Planner parity.
+- `instruct`: post `instruction` (up to 64 KiB) to all or named (`targets`)
+  created documents—starting stopped Planners and steering/nudging live working
+  Planners (`steered: true`) when their harness supports mid-run steering.
+- `build`: start builds for all or named (`targets`) created documents
+  (`draftIfNeeded`, `requireSettledDecisions`, `retry`, `rebuild`), returning
+  per-document status (`started`, `drafting`, `already-building`, `rebuilding`,
+  or `refused`) and refreshing an existing index table.
+- `index`: write or update the `## Documents created from this one` table in the
+  source document.
+
+```json
+{
+	"id": "/documents/octo-org/score/umbrella-plan",
+	"operation": "decisions",
+	"status": ["open", "reopened"]
+}
+```
+
+Any target not directly created from `id` is excluded and returned in `unknown`
+(or refused with `target-not-created` for `answer`).
+
+Scoped launch tokens:
+
+- A **Planner** MCP launch token reaches its own document, its direct child
+  documents, and direct same-repository top-level documents whose `createdFrom`
+  is that document (strictly non-transitive). It cannot create new documents via
+  `create_document` or `orchestrate open`.
+- A **run** MCP launch token reaches only its own document (never children or
+  `createdFrom` documents).
+
 ## Document URLs and IDs
 
 The `url` returned by `create_document`, `update_document`, and `read_document` is
@@ -325,7 +566,8 @@ caller that has only the UUID can recover it:
 ```
 
 `read_document`, `read_implementation`, `archive_document`, `restore_document`,
-`update_document`, `upload_image`, and `invoke_planner` accept either a document UUID
+`update_document`, `upload_image`, `invoke_planner`, `answer_decision`,
+`build_plan`, and `orchestrate` accept either a document UUID
 or that canonical URL in their `id` input. The URL may be passed back exactly as returned; an absolute URL must
 use the configured Chopin origin. Both reads return the stable UUID as the
 document `id`.
@@ -520,9 +762,11 @@ token's `read:org` or Members access, SSO authorization, and GitHub availability
 `repository-forbidden` means the supplied token cannot expose the repository or
 lacks the operation's repository permission; it does not mean the GitHub App for
 Chopin must be installed. Pull access is enough for `list_documents`,
-`read_document`, and `read_implementation`. Pull plus push or admin access is
+`read_document`, `read_implementation`, and read-only `orchestrate` operations
+(`list` and `decisions`). Pull plus push or admin access is
 required for create, update, image upload, rename, archive, restore, invoke,
-start, and report lifecycle operations. `invoke_planner` additionally needs a Planner owner or the
+`answer_decision`, `build_plan`, mutating `orchestrate` operations (`open`,
+`answer`, `instruct`, `build`, `index`), start, and report lifecycle operations. `invoke_planner` additionally needs a Planner owner or the
 caller's live browser login, as described above. Use an account with the required access or ask a repository
 owner to grant it.
 

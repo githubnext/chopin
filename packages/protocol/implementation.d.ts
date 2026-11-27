@@ -138,6 +138,8 @@ export type ImplementationSnapshot = {
 		revision: number;
 		planRevision: number;
 		state: "draft" | "approved" | "locked" | "superseded";
+		approvedBy?: string;
+		operationKey?: string;
 		definition: {
 			tasks: Array<{
 				id: string;

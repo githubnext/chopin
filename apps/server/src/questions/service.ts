@@ -24,6 +24,29 @@ export { retitle } from "./card-retitle";
 export { addServerOption } from "./card-server-options";
 export { suggest } from "./card-suggestions";
 export {
+	DECISION_ORIGINS,
+	DECISION_STATUSES,
+	isCardDraftUntouched,
+	isDraftUntouched,
+	parseDecisionOrigin,
+	parseDecisionStatusFilter,
+	readDecisions,
+	readDecisionSnapshot,
+	resolveDecisionRecord,
+} from "./read-decisions";
+export type {
+	DecisionCounts,
+	DecisionFilter,
+	DecisionOrigin,
+	DecisionOutcome,
+	DecisionQuestion,
+	DecisionQuestionOption,
+	DecisionSnapshot,
+	DecisionStatus,
+	DecisionStatusFilter,
+	ReadDecisionsResult,
+} from "./read-decisions";
+export {
 	isOpenStatus,
 	matchesQuestionSource,
 	normalizeRecord,
@@ -55,7 +78,12 @@ export {
 } from "./service-relationships";
 export type { Placement, Sections } from "./service-relationships";
 export { reopen } from "./service-reopen";
-export { submit } from "./service-submit";
+export { answerDecision, submit } from "./service-submit";
+export type {
+	AnswerDecisionInput,
+	AnswerDecisionResult,
+	DecisionAnswerValue,
+} from "./service-submit";
 export { setWhy } from "./service-why";
 export type { Questions, StoredOpen } from "./store";
 
