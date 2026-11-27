@@ -728,7 +728,7 @@ class RemoteSession {
 	}
 
 	/** The link is gone for good: nothing more will arrive for this session. */
-	linkClosed(unplanned = false): void {
+	linkClosed(): void {
 		// A session the cut keeps for its client keeps its launch, which the hold names.
 		let held = this.planner.stopping === true && this.#port.kept(this.id);
 		this.planner.suspended = false;
@@ -737,11 +737,7 @@ class RemoteSession {
 		if (turn) {
 			this.#finish(
 				turn,
-				turn.stopped
-					? undefined
-					: unplanned
-					? new PlannerDisconnectedError()
-					: new Error("The machine disconnected during the turn."),
+				turn.stopped ? undefined : new Error("The machine disconnected during the turn."),
 			);
 		}
 		this.#closed = true;
@@ -1707,13 +1703,12 @@ export class AgentLink {
 			? [...this.#sessions.values()].filter(session => this.#keeps(session))
 			: [];
 		if (kept.length) return this.#suspend(kept);
-		let unplanned = !this.#planned && !this.#stopping;
 		let withdraw = this.#withdrawOnClose;
 		this.#state = "closed";
 		clearInterval(this.#watch);
 		this.#forget?.();
 		this.#forget = undefined;
-		this.#teardown({ unplanned, withdraw });
+		this.#teardown({ withdraw });
 	}
 
 	/**
@@ -1732,7 +1727,7 @@ export class AgentLink {
 	terminate(withdraw = false): void {
 		if (this.#state !== "suspended") return;
 		this.#state = "closed";
-		this.#teardown({ unplanned: false, withdraw });
+		this.#teardown({ withdraw });
 	}
 
 	#waitingOn(session: string): number {
@@ -1756,7 +1751,7 @@ export class AgentLink {
 				session.suspend();
 				continue;
 			}
-			session.linkClosed(true);
+			session.linkClosed();
 			this.#sessions.delete(id);
 			this.#cancelInputs(id, "silent");
 		}
@@ -1782,12 +1777,11 @@ export class AgentLink {
 	 * Ends every session this link still holds and detaches (or, when explicitly withdrawing
 	 * for an archived/deleted document, withdraws) its open questions.
 	 */
-	#teardown({ unplanned = false, withdraw = false }: {
-		unplanned?: boolean;
+	#teardown({ withdraw = false }: {
 		withdraw?: boolean;
 	} = {}): void {
 		this.#offered.resolve();
-		for (let session of this.#sessions.values()) session.linkClosed(unplanned);
+		for (let session of this.#sessions.values()) session.linkClosed();
 		this.#sessions.clear();
 		if (!this.#stopping) {
 			for (let input of this.#inputs.values()) {
@@ -2019,7 +2013,7 @@ export class AgentLink {
 		for (let [id, session] of this.#sessions) {
 			let waiting = held.get(id);
 			if (!waiting) {
-				session.linkClosed(false);
+				session.linkClosed();
 				this.#cancelInputs(id, "silent");
 				continue;
 			}

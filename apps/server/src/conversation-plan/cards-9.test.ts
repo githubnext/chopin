@@ -80,7 +80,7 @@ test("live card listeners mirror a reopen emitted inside the room lock without d
 			ts: 0,
 			rid: "save-2",
 			id,
-			revision: 1,
+			revision: 3,
 			suggestedOptionId: OPTION,
 		});
 		for (let attempt = 0; attempt < 100 && context.plan.pendingCardActions.length; attempt++) {

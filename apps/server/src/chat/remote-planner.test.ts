@@ -2055,7 +2055,7 @@ for (let steers of [true, false]) {
 	);
 }
 
-test("an unplanned disconnect mid-turn with no open input-request classifies the turn as dropped rather than error", async () => {
+test("an unplanned disconnect mid-turn with no open input-request keeps the Retry failure banner", async () => {
 	let room = await remoteRoom();
 	let { context, server } = room;
 	let turning = Promise.withResolvers<void>();
@@ -2078,7 +2078,10 @@ test("an unplanned disconnect mid-turn with no open input-request classifies the
 	await context.chat.running;
 	let failed = context.chat.entries.filter(entry => entry.turnFailure);
 	expect(failed).toHaveLength(1);
-	expect(failed[0]!.turnFailure).toMatchObject({ kind: "dropped" });
+	expect(failed[0]!.turnFailure).toMatchObject({
+		kind: "error",
+		detail: "The machine disconnected during the turn.",
+	});
 });
 
 test("a fast reconnect that clears suspended before turn catch runs still classifies the interrupted turn as dropped", async () => {
