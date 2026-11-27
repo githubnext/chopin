@@ -813,4 +813,101 @@ describe("lazyGithubTools", () => {
 		controller.abort(new Error("credential-rotated"));
 		expect(remoteSignal?.aborted).toBe(true);
 	});
+
+	test("follows a rebound owner across credential rotation and delegated refresh windows, while failing on session revocation", async () => {
+		let rev1Controller = new AbortController();
+		let rev2Controller = new AbortController();
+		let rev3Controller = new AbortController();
+		let rev3Token: string | undefined = "t3";
+		let rev1 = fakeOwner({
+			token: "t1",
+			credentialRevision: 1,
+			signal: rev1Controller.signal,
+			currentToken: () => (rev1Controller.signal.aborted ? undefined : "t1"),
+		});
+		let rev2 = fakeOwner({
+			token: "t2",
+			credentialRevision: 2,
+			signal: rev2Controller.signal,
+			currentToken: () => (rev2Controller.signal.aborted ? undefined : "t2"),
+		});
+		let rev3 = fakeOwner({
+			token: "t3",
+			credentialRevision: 3,
+			signal: rev3Controller.signal,
+			currentToken: () => (rev3Controller.signal.aborted ? undefined : rev3Token),
+		});
+		let current = rev1;
+		let waitGate = Promise.resolve();
+		let loadedTokens: string[] = [];
+		let midDiscoveryGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+		let tools = lazyGithubTools(
+			() => current,
+			async active => {
+				loadedTokens.push(active.token);
+				if (active.token === "t2" && midDiscoveryGate) {
+					await midDiscoveryGate.promise;
+				}
+				return {
+					ok: true,
+					value: {
+						list_pull_requests: tool({
+							inputSchema: GITHUB_TOOL_SCHEMAS.list_pull_requests.inputSchema,
+							execute: async () => ({ token: active.token }),
+						}),
+						pull_request_read: remoteTool("pull_request_read"),
+					},
+				};
+			},
+			() => waitGate,
+		);
+		let call = () =>
+			tools.list_pull_requests!.execute!({}, {
+				toolCallId: "pr",
+				messages: [],
+				context: { repository: repository() },
+			});
+
+		// 1. Initial call uses rev 1.
+		expect(await call()).toEqual({ token: "t1" });
+
+		// 2. Call landing while rev 1 -> rev 2 rotation is already in flight waits and loads rev 2.
+		let rotate1 = Promise.withResolvers<void>();
+		waitGate = rotate1.promise;
+		rev1Controller.abort(new Error("credential-rotated"));
+		let duringRotation = call();
+		await Bun.sleep(0);
+		expect(loadedTokens).toEqual(["t1"]);
+		current = rev2;
+		rotate1.resolve();
+		expect(await duringRotation).toEqual({ token: "t2" });
+		expect(loadedTokens).toEqual(["t1", "t2"]);
+
+		// 3. Rotation starting mid-discovery retries once on rev 3.
+		midDiscoveryGate = Promise.withResolvers<void>();
+		let rotate2 = Promise.withResolvers<void>();
+		waitGate = rotate2.promise;
+		let midCall = call();
+		await Bun.sleep(0);
+		rev2Controller.abort(new Error("credential-rotated"));
+		current = rev3;
+		rotate2.resolve();
+		midDiscoveryGate.resolve();
+		expect(await midCall).toEqual({ token: "t3" });
+
+		// 4. Delegated refresh masking currentToken() mid-call waits and succeeds when same token returns.
+		let delegated = Promise.withResolvers<void>();
+		waitGate = delegated.promise;
+		rev3Token = undefined;
+		let delegatedCall = call();
+		await Bun.sleep(0);
+		rev3Token = "t3";
+		delegated.resolve();
+		expect(await delegatedCall).toEqual({ token: "t3" });
+
+		// 5. Session revocation fails closed immediately without retrying.
+		waitGate = Promise.resolve();
+		rev3Controller.abort(new Error("session-revoked"));
+		await expect(call()).rejects.toThrow("session-revoked");
+	});
 });

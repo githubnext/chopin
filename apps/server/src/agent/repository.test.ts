@@ -164,4 +164,74 @@ describe("hosted repository tools", () => {
 		);
 		expect(requests).toBe(1);
 	});
+
+	it("waits for an in-flight owner rebind before failing and retries once on a 401 when the token rotates", async () => {
+		let seen: Array<string | null> = [];
+		let tools = repositoryTools({
+			fetch: async (_input, init) => {
+				let auth = new Headers(init?.headers).get("authorization");
+				seen.push(auth);
+				if (auth === "Bearer ghu_stale") return new Response("Unauthorized", { status: 401 });
+				return Response.json({
+					type: "file",
+					encoding: "base64",
+					content: Buffer.from("hello").toString("base64"),
+				});
+			},
+		});
+		let token: string | undefined;
+		let gate = Promise.withResolvers<void>();
+		let context = {
+			repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
+			owner: {
+				currentToken: () => token,
+				waitForRebind: () => gate.promise,
+			},
+		};
+		let pending = tools.read_repository_file.execute!(
+			{ path: "a.ts" },
+			{ context, toolCallId: "call-1", messages: [] },
+		);
+		await Bun.sleep(0);
+		expect(seen).toEqual([]);
+		token = "ghu_rotated";
+		gate.resolve();
+		expect(await pending).toContain("1: hello");
+		expect(seen).toEqual(["Bearer ghu_rotated"]);
+
+		// A 401 while rotation finishes retries once with the rotated token.
+		token = "ghu_stale";
+		let retryContext = {
+			repository: context.repository,
+			owner: {
+				currentToken: () => token,
+				waitForRebind: async () => {
+					token = "ghu_fresh";
+				},
+			},
+		};
+		expect(
+			await tools.read_repository_file.execute!(
+				{ path: "a.ts" },
+				{ context: retryContext, toolCallId: "call-2", messages: [] },
+			),
+		).toContain("1: hello");
+		expect(seen).toEqual(["Bearer ghu_rotated", "Bearer ghu_stale", "Bearer ghu_fresh"]);
+
+		// If rebind finishes with no token, the read fails closed without calling fetch.
+		let emptyContext = {
+			repository: context.repository,
+			owner: {
+				currentToken: () => undefined,
+				waitForRebind: async () => {},
+			},
+		};
+		expect(
+			await tools.read_repository_file.execute!(
+				{ path: "a.ts" },
+				{ context: emptyContext, toolCallId: "call-3", messages: [] },
+			),
+		).toContain("authorization expired");
+		expect(seen).toHaveLength(3);
+	});
 });

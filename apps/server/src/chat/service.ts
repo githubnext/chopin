@@ -1024,6 +1024,22 @@ function ownerSignal(
 		// takes one binding, which the retained session releases with it.
 		let retained = context.chat.retained;
 		if (retained?.session === opened.session) {
+			if (retained.binding !== previous) {
+				if (retained.binding.signal.aborted && !credentialRenewed(retained.binding)) {
+					ended.abort(retained.binding.signal.reason);
+					return;
+				}
+				opened.binding = retained.binding;
+				if (context.chat.agent === opened.session) {
+					context.chat.owner = {
+						sessionId: retained.binding.ownerSessionId,
+						generation: retained.binding.ownerGeneration,
+						revision: retained.binding.credentialRevision,
+					};
+				}
+				watch(retained.binding);
+				return;
+			}
 			let rebound = await rebindRetained(context, retained).catch(() => false);
 			if (released) return;
 			if (!rebound || context.chat.retained !== retained) {
@@ -1031,27 +1047,50 @@ function ownerSignal(
 				return;
 			}
 			opened.binding = retained.binding;
+			if (context.chat.agent === opened.session) {
+				context.chat.owner = {
+					sessionId: retained.binding.ownerSessionId,
+					generation: retained.binding.ownerGeneration,
+					revision: retained.binding.credentialRevision,
+				};
+			}
 			watch(retained.binding);
 			return;
 		}
-		let binding = await context.activeOwner?.().catch(() => undefined);
-		if (released) {
-			binding?.release();
-			return;
+		let settled = Promise.withResolvers<void>();
+		opened.session.rebinding?.(settled.promise);
+		try {
+			let binding = await context.activeOwner?.().catch(() => undefined);
+			if (released) {
+				binding?.release();
+				return;
+			}
+			let sameOwner = !!binding && ((binding.ownerSessionId === previous.ownerSessionId
+				&& binding.ownerGeneration === previous.ownerGeneration)
+				|| (binding.ownerUserId !== undefined
+					&& binding.ownerUserId === previous.ownerUserId));
+			if (
+				!binding || !sameOwner
+				|| binding.repository.id !== previous.repository.id || binding.signal.aborted
+			) {
+				binding?.release();
+				ended.abort(previous.signal.reason);
+				return;
+			}
+			opened.session.rebind(binding);
+			opened.binding = binding;
+			if (context.chat.agent === opened.session) {
+				context.chat.owner = {
+					sessionId: binding.ownerSessionId,
+					generation: binding.ownerGeneration,
+					revision: binding.credentialRevision,
+				};
+			}
+			previous.release();
+			watch(binding);
+		} finally {
+			settled.resolve();
 		}
-		if (
-			!binding || binding.ownerSessionId !== previous.ownerSessionId
-			|| binding.ownerGeneration !== previous.ownerGeneration
-			|| binding.repository.id !== previous.repository.id || binding.signal.aborted
-		) {
-			binding?.release();
-			ended.abort(previous.signal.reason);
-			return;
-		}
-		opened.session.rebind(binding);
-		opened.binding = binding;
-		previous.release();
-		watch(binding);
 	};
 	watch(opened.binding);
 	return {
@@ -1071,7 +1110,12 @@ function ownerSignal(
 function rebindRetained(context: Room, retained: Retained): Promise<boolean> {
 	let previous = retained.binding;
 	if (retained.rebinding?.from === previous) return retained.rebinding.done;
-	let done = rebindRetainedFrom(context, retained, previous);
+	let settled = Promise.withResolvers<void>();
+	retained.session.rebinding?.(settled.promise);
+	let done = rebindRetainedFrom(context, retained, previous).finally(() => {
+		settled.resolve();
+		if (retained.rebinding?.done === done) retained.rebinding = undefined;
+	});
 	retained.rebinding = { from: previous, done };
 	return done;
 }
@@ -1100,6 +1144,13 @@ async function rebindRetainedFrom(
 	previous.signal.removeEventListener("abort", retained.ended);
 	retained.session.rebind(binding);
 	retained.binding = binding;
+	if (context.chat.agent === retained.session) {
+		context.chat.owner = {
+			sessionId: binding.ownerSessionId,
+			generation: binding.ownerGeneration,
+			revision: binding.credentialRevision,
+		};
+	}
 	previous.release();
 	binding.signal.addEventListener("abort", retained.ended, { once: true });
 	return true;
@@ -2827,12 +2878,39 @@ async function repositorySession(
 	let isolated = reader || !!context.chat.job;
 	// A background job keeps its isolated session: it never borrows or ends the retained Planner.
 	if (retained && !isolated) {
-		if (!retained.binding.signal.aborted && await retained.binding.revalidate()) {
+		if (!retained.binding.signal.aborted && !retained.binding.currentToken()) {
+			await retained.binding.waitForRebind?.();
+		}
+		let initial = retained.binding;
+		if (
+			context.chat.retained === retained
+			&& !initial.signal.aborted
+			&& await initial.revalidate()
+			&& context.chat.retained === retained
+		) {
 			context.chat.agent = retained.session;
+			context.chat.owner = {
+				sessionId: retained.binding.ownerSessionId,
+				generation: retained.binding.ownerGeneration,
+				revision: retained.binding.credentialRevision,
+			};
 			return { session: retained.session, binding: retained.binding };
 		}
-		if (await rebindRetained(context, retained) && await retained.binding.revalidate()) {
+		let rebound = context.chat.retained === retained
+			&& ((retained.binding !== initial && !retained.binding.signal.aborted)
+				|| await rebindRetained(context, retained));
+		if (
+			rebound
+			&& context.chat.retained === retained
+			&& await retained.binding.revalidate()
+			&& context.chat.retained === retained
+		) {
 			context.chat.agent = retained.session;
+			context.chat.owner = {
+				sessionId: retained.binding.ownerSessionId,
+				generation: retained.binding.ownerGeneration,
+				revision: retained.binding.credentialRevision,
+			};
 			return { session: retained.session, binding: retained.binding };
 		}
 		await retained.release();
@@ -3192,6 +3270,7 @@ async function run(
 	else about?.signal?.addEventListener("abort", invalidate, { once: true });
 	chat.turnController = turnController;
 	let held = isolated ? chat.retained : undefined;
+	let heldBinding = held?.binding;
 	let heldOwner = chat.owner;
 	let heldReferences = held ? new Map(chat.referenceCache) : undefined;
 	try {
@@ -3446,7 +3525,13 @@ async function run(
 				// with the references the retained Planner can read.
 				if (held && chat.retained === held) {
 					chat.agent = held.session;
-					chat.owner = heldOwner;
+					chat.owner = held.binding !== heldBinding
+						? {
+							sessionId: held.binding.ownerSessionId,
+							generation: held.binding.ownerGeneration,
+							revision: held.binding.credentialRevision,
+						}
+						: heldOwner;
 					if (heldReferences) chat.referenceCache = heldReferences;
 				}
 			}
@@ -4325,23 +4410,27 @@ export async function resetAgent(
 	reason?: string,
 ): Promise<void> {
 	let binding = chat.owner ?? chat.openingOwner;
-	if (
-		!binding
-		|| (sessionId && binding.sessionId !== sessionId)
-		|| (revision !== undefined && binding.revision !== revision)
-	) return;
-	chat.lifecycle++;
-	chat.activeRequest = undefined;
-	chat.focus = undefined;
-	if (reason && chat.turnController) chat.interruption = reason;
-	if (chat.job) {
-		chat.job = undefined;
-		chat.jobOutput = undefined;
+	let matches = !!binding
+		&& (!sessionId || binding.sessionId === sessionId)
+		&& (revision === undefined || binding.revision === revision);
+	let rebindable = revision !== undefined
+		&& !chat.job
+		&& !chat.reader
+		&& (!!chat.agent?.rebind || (!chat.busy && !!chat.retained?.session.rebind));
+	if (matches && !rebindable) {
+		chat.lifecycle++;
+		chat.activeRequest = undefined;
+		chat.focus = undefined;
+		if (reason && chat.turnController) chat.interruption = reason;
+		if (chat.job) {
+			chat.job = undefined;
+			chat.jobOutput = undefined;
+		}
+		chat.turnController?.abort();
+		chat.referenceCache.clear();
+		chat.bootstrapEntries = undefined;
+		chat.openingOwner = undefined;
 	}
-	chat.turnController?.abort();
-	chat.referenceCache.clear();
-	chat.bootstrapEntries = undefined;
-	chat.openingOwner = undefined;
 	if (chat.childChats) {
 		for (let child of chat.childChats.values()) {
 			await resetAgent(child, sessionId, revision, reason);

@@ -13,7 +13,7 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link/client";
 import type { AddressInfo, Socket } from "node:net";
 import type { ServerWebSocket } from "bun";
-import type { Repository, RepositoryPage } from "../github/client";
+import type { GitHubTokenGrant, Repository, RepositoryPage } from "../github/client";
 import type { AttachmentAuth, PlannerAttachmentOptions } from "../harness/remote/attachments";
 import type { AgentAi, AgentAuth, AgentHooks, AgentSocketData } from "../harness/remote/endpoint";
 import type { AgentLink } from "../harness/remote/link";
@@ -74,7 +74,13 @@ export const LINK_PERSISTENCE = {
 	clientId: "link-test",
 };
 
-export async function linkAuth(channelId?: string, options: { persistent?: boolean } = {}) {
+export async function linkAuth(
+	channelId?: string,
+	options: {
+		persistent?: boolean;
+		refresh?: (refreshToken: string) => Promise<GitHubTokenGrant>;
+	} = {},
+) {
 	let storage = new MemoryStorage();
 	let now = new Date();
 	for (let account of Object.values(ACCOUNTS)) {
@@ -82,8 +88,13 @@ export async function linkAuth(channelId?: string, options: { persistent?: boole
 	}
 	let clock = { skewMs: 0 };
 	let revocations = new Set<(sessionId: string) => Promise<void>>();
+	let rotations = new Set<(sessionId: string, revision: number) => Promise<void>>();
 	let sessions = new Sessions(storage, false, () => new Date(Date.now() + clock.skewMs), {
 		...(options.persistent ? { persistence: LINK_PERSISTENCE } : {}),
+		...(options.refresh ? { refresh: options.refresh } : {}),
+		beforeRefresh: async (id, revision) => {
+			for (let rotating of rotations) await rotating(id, revision);
+		},
 		onRevoked: async id => {
 			for (let revoked of revocations) await revoked(id);
 		},
@@ -144,8 +155,10 @@ export async function linkAuth(channelId?: string, options: { persistent?: boole
 					: undefined;
 			},
 			async repositoryAccess(token: string, owner: string, name: string) {
-				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token)
-					?? machineAccount(token);
+				let account =
+					Object.values(ACCOUNTS).find(value =>
+						token === loginToken(value.login) || token.startsWith(`${loginToken(value.login)}-`)
+					) ?? machineAccount(token);
 				return account ? scoreRepository(owner, name, account.push) : undefined;
 			},
 			/** The head of octo-org/score's default branch, which a machine with no checkout clones. */
@@ -203,6 +216,8 @@ export async function linkAuth(channelId?: string, options: { persistent?: boole
 		clock,
 		/** Called with every browser login that ends, as `main.ts` wires `onSessionRevoked`. */
 		revocations,
+		/** Called before every credential rotation, as `main.ts` wires `onCredentialsWillRotate`. */
+		rotations,
 		/** Signs `login` out of the browser, as the logout route does. */
 		async signOut(login: string) {
 			let cookie = cookies.get(login)!;

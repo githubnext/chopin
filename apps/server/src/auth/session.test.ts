@@ -388,6 +388,116 @@ describe("hosted login sessions", () => {
 		expect(authenticated?.access).toMatchObject({ token: "ghu_second", revision: 2 });
 		expect(attempts).toEqual(["ghu_first", "ghu_second"]);
 	});
+
+	it("waits for an in-flight 401 rotation when resolving a non-expiring session and clears the lock before settling", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let refreshGate = Promise.withResolvers<GitHubTokenGrant>();
+		let beforeSeen: Array<{ id: string; revision: number; tokenDuringHook: string | undefined }> =
+			[];
+		let sessions = new Sessions(storage, false, () => now, {
+			beforeRefresh: async (id, revision) => {
+				beforeSeen.push({ id, revision, tokenDuringHook: sessions.token(id, revision) });
+			},
+			refresh: () => refreshGate.promise,
+		});
+		let issued = await sessions.issue("U_test", grant("ghu_first", "ghr_first"));
+		let initial = (await sessions.resolve(issued.id))!;
+
+		let using = sessions.use(initial, async token => {
+			if (token === "ghu_first") throw new GitHubError("rejected", 401);
+			return token;
+		});
+		await Bun.sleep(0);
+		expect(beforeSeen).toEqual([{ id: issued.id, revision: 1, tokenDuringHook: undefined }]);
+		expect(sessions.token(issued.id, 1)).toBeUndefined();
+		expect(await sessions.inspect(issued.id)).toBeUndefined();
+
+		let resolvedDuringRefresh = false;
+		let resolving = sessions.resolve(issued.id).then(value => {
+			resolvedDuringRefresh = true;
+			return value;
+		});
+		let tokenAfterAwait: string | undefined;
+		let inspectAfterAwait: number | undefined;
+		let waiting = sessions.awaitRefresh(issued.id).then(async () => {
+			tokenAfterAwait = sessions.token(issued.id, 2);
+			inspectAfterAwait = (await sessions.inspect(issued.id))?.access.revision;
+		});
+		await Bun.sleep(0);
+		expect(resolvedDuringRefresh).toBe(false);
+
+		refreshGate.resolve(grant("ghu_second", "ghr_second"));
+		expect((await using).value).toBe("ghu_second");
+		expect((await resolving)?.access).toMatchObject({ token: "ghu_second", revision: 2 });
+		await waiting;
+		expect(tokenAfterAwait).toBe("ghu_second");
+		expect(inspectAfterAwait).toBe(2);
+	});
+
+	it("waits on awaitRefresh across delegated rotation before beforeRefresh fires, for both changed and unchanged tokens", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let sourceGate:
+			| ReturnType<typeof Promise.withResolvers<{ token: string; expiresAt: Date }>>
+			| undefined;
+		let beforeCount = 0;
+		let sessions = new Sessions(storage, false, () => now, {
+			beforeRefresh: async () => {
+				beforeCount++;
+			},
+		});
+		let id = await sessions.delegate("U_test", async rejected => {
+			if (!rejected) {
+				return { token: "ghu_delegated_1", expiresAt: new Date(now.getTime() + 3_600_000) };
+			}
+			sourceGate = Promise.withResolvers();
+			return sourceGate.promise;
+		});
+		let initial = (await sessions.resolve(id))!;
+
+		// First delegated rotation: source returns a new token after async I/O.
+		let rotating = sessions.use(initial, async token => {
+			if (token === "ghu_delegated_1") throw new GitHubError("rejected", 401);
+			return token;
+		});
+		await Bun.sleep(0);
+		expect(beforeCount).toBe(0);
+		expect(sessions.token(id, 1)).toBeUndefined();
+		let waited = sessions.awaitRefresh(id);
+		sourceGate!.resolve({
+			token: "ghu_delegated_2",
+			expiresAt: new Date(now.getTime() + 3_600_000),
+		});
+		await waited;
+		expect(beforeCount).toBe(1);
+		expect(sessions.token(id, 2)).toBe("ghu_delegated_2");
+		expect((await rotating).value).toBe("ghu_delegated_2");
+
+		// Second delegated rotation: source returns the same token (no beforeRefresh).
+		let second = (await sessions.resolve(id))!;
+		let failedOnce = false;
+		let sameAttempt = sessions.use(second, async token => {
+			if (!failedOnce) {
+				failedOnce = true;
+				throw new GitHubError("rejected", 401);
+			}
+			return token;
+		});
+		await Bun.sleep(0);
+		expect(sessions.token(id, 2)).toBeUndefined();
+		let waitedSame = sessions.awaitRefresh(id);
+		sourceGate!.resolve({
+			token: "ghu_delegated_2",
+			expiresAt: new Date(now.getTime() + 3_600_000),
+		});
+		await waitedSame;
+		expect(beforeCount).toBe(1);
+		expect(sessions.token(id, 2)).toBe("ghu_delegated_2");
+		expect((await sameAttempt).value).toBe("ghu_delegated_2");
+	});
 });
 
 describe("OAuth attempts", () => {
