@@ -21,7 +21,7 @@ import type { Output } from "./output";
 import { readOwn, realDirectory, writeOwn } from "./ai-agent";
 
 /** The adapter releases agents here are given, as the Atomic they run. */
-export const STORE_ADAPTER_RANGE = "^0.10.12";
+export const STORE_ADAPTER_RANGE = "^0.10.14";
 export const STORE_ADAPTER_SPEC = `${MACHINE_STORE_ADAPTER}@${STORE_ADAPTER_RANGE}`;
 export const STORE_MAX_CONNECTIONS = 4;
 export const UNUSABLE_SAVED_STORE =
