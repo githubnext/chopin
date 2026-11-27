@@ -305,3 +305,21 @@ No Lexical node was added: both ride in the existing questionnaire node's state.
 **Planner.** The Planner may propose criteria in `ask`. It cannot mark cells or suggest marks: a
 mark is a human judgement, and the advisory `suggested` choice is the only Planner-authored draft
 input. The settle write-up prompt lists each criterion with the chosen option's mark.
+
+## MCP decision reading and answering
+
+External MCP clients (and `orchestrate` `decisions` / `answer`) can inspect and settle decisions
+through the same authoritative records and commit core as the browser UI:
+
+- **`read_document`** accepts optional `includeDecisions`, `decisionStatus` (`"all"`, one status,
+  or a non-empty list of statuses), and `decisionOrigin` (`"planner"`, `"conversation"`, `"human"`).
+  It returns filtered `decisions` snapshots (including live `revision`, `paused`,
+  `draftInProgress`, `settled`, `previous` across reopen, and `historyCount`) alongside
+  document-wide `decisionCounts`, working identically on live rooms and unloaded documents.
+- **`answer_decision`** accepts either the decision card ID or any question ID within the card,
+  the open `revision`, a caller `idempotencyKey`, and explicit `optionIds`, `text`, or
+  question-keyed `answers`. It checks receiver-side idempotency first (`mcp_invocations`), refuses
+  unsaved collaborator drafts (`draft-in-progress`), validates via `Question.derive`, commits and
+  broadcasts through `answerDecision` in `apps/server/src/questions/service-submit.ts`, and
+  triggers the same Planner handoff (`onPlannerAnswer`) as browser Save—without firing duplicates on
+  idempotent replay. See [Connect a local coding agent](local-agent-mcp.md#answering-decisions-with-answer_decision).

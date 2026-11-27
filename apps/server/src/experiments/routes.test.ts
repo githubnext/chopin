@@ -2225,7 +2225,43 @@ test("a launch's MCP token reaches Chopin's tools only for its own documents, wh
 		parentChannelId: documentId,
 		now: new Date(),
 	} as never);
-	let adapter = hosted(auth as never, undefined, { launchCaller: runtime.mcpCaller });
+	let createdSub = crypto.randomUUID();
+	await storage.channels.create({
+		id: createdSub,
+		repositoryId: "repo",
+		repositoryOwner: "org",
+		repositoryName: "repo",
+		title: "Created sub-document",
+		createdBy: "alice",
+		createdFrom: documentId,
+		now: new Date(),
+	} as never);
+	let grandchild = crypto.randomUUID();
+	await storage.channels.create({
+		id: grandchild,
+		repositoryId: "repo",
+		repositoryOwner: "org",
+		repositoryName: "repo",
+		title: "Grandchild sub-document",
+		createdBy: "alice",
+		createdFrom: createdSub,
+		now: new Date(),
+	} as never);
+	let subChild = crypto.randomUUID();
+	await storage.channels.create({
+		id: subChild,
+		repositoryId: "repo",
+		repositoryOwner: "org",
+		repositoryName: "repo",
+		title: "Child of created sub-document",
+		createdBy: "alice",
+		parentChannelId: createdSub,
+		now: new Date(),
+	} as never);
+	let lease = await testLease(storage);
+	let adapter = hosted(auth as never, { lease: () => lease }, {
+		launchCaller: runtime.mcpCaller,
+	});
 	let caller = (bearer: string) =>
 		adapter.caller(
 			new Request("https://chopin.test/mcp", { headers: { authorization: `Bearer ${bearer}` } }),
@@ -2236,7 +2272,8 @@ test("a launch's MCP token reaches Chopin's tools only for its own documents, wh
 	let reaches = async (bearer: string, id: string) =>
 		typeof await locateDocument(auth as never, (await caller(bearer))!, id) === "object";
 
-	// A Planner's: the machine's owner, for its document and that document's children.
+	// A Planner's: the machine's owner, for its document, direct children, and direct same-repo
+	// top-level createdFrom documents (non-transitive).
 	let credential = "chopin_p_" + "a".repeat(43);
 	await storage.plannerCredentials.put({
 		digest: credentialDigest(credential),
@@ -2249,11 +2286,47 @@ test("a launch's MCP token reaches Chopin's tools only for its own documents, wh
 	expect((await caller(planner.token))?.user).toMatchObject({ id: "alice", login: "alice" });
 	expect(await reaches(planner.token, documentId)).toBe(true);
 	expect(await reaches(planner.token, child)).toBe(true);
+	expect(await reaches(planner.token, createdSub)).toBe(true);
+	expect(await reaches(planner.token, grandchild)).toBe(false);
+	expect(await reaches(planner.token, subChild)).toBe(false);
 	expect(await reaches(planner.token, other)).toBe(false);
 	let listed = await adapter.documents.list((await caller(planner.token))!, "org/repo");
 	expect((listed as { id: string }[]).map(value => value.id).sort()).toEqual(
-		[documentId, child].sort(),
+		[documentId, child, createdSub].sort(),
 	);
+	let plannerOrch = await adapter.orchestrate!.orchestrate((await caller(planner.token))!, {
+		id: documentId,
+		arguments: { operation: "list" },
+	});
+	expect(plannerOrch).toMatchObject({
+		ok: true,
+		operation: "list",
+		documents: [expect.objectContaining({ id: createdSub })],
+	});
+	// A Planner launch token cannot create new documents through MCP `orchestrate open` either.
+	let plannerOpen = await adapter.orchestrate!.orchestrate((await caller(planner.token))!, {
+		id: documentId,
+		arguments: {
+			operation: "open",
+			documents: [{
+				idempotencyKey: "sub-launch-open",
+				title: "Denied open",
+				brief: {
+					goal: "Test",
+					constraints: [],
+					settledDecisions: [],
+					openQuestions: [],
+					repositoryFindings: [],
+				},
+				document: "# Denied open\n\nBody.\n",
+			}],
+		},
+	});
+	expect(plannerOpen).toMatchObject({
+		ok: true,
+		operation: "open",
+		documents: [expect.objectContaining({ ok: false, reason: "repository-forbidden" })],
+	});
 	expect(
 		await adapter.create!.create(
 			(await caller(planner.token))!,
@@ -2275,7 +2348,14 @@ test("a launch's MCP token reaches Chopin's tools only for its own documents, wh
 	expect((await caller(run.token))?.user).toMatchObject({ id: "alice" });
 	expect(await reaches(run.token, documentId)).toBe(true);
 	expect(await reaches(run.token, child)).toBe(false);
+	expect(await reaches(run.token, createdSub)).toBe(false);
+	expect(await reaches(run.token, grandchild)).toBe(false);
 	expect(await reaches(run.token, other)).toBe(false);
+	let runOrch = await adapter.orchestrate!.orchestrate((await caller(run.token))!, {
+		id: documentId,
+		arguments: { operation: "list" },
+	});
+	expect(runOrch).toMatchObject({ ok: true, operation: "list", documents: [] });
 	await tool(connection.token, "fail_experiment", {
 		id,
 		generation: claim.generation,

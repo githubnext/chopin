@@ -1,16 +1,10 @@
 import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
-import {
-	liveSnapshot,
-	queueBuild,
-	queueRebuild,
-	reportBuild,
-	requestBuild,
-	runner,
-} from "./builds";
+import { liveSnapshot, reportBuild, requestBuild, runner } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
-import { planSourceFor } from "./plan-source";
 import { planningReadiness, reportImplementationLifecycle } from "./plan-graphs";
+import { createBuildStarter, MachineRefused } from "./start-build";
+import type { DraftBuildStarter } from "./start-build";
 import { exclusive } from "../plan/service";
 import { GitHubError } from "../github/client";
 import type { GitHubReferenceSource } from "../github/client";
@@ -18,7 +12,6 @@ import type { PullRequestState } from "./builds";
 import { AdmissionDenied } from "../auth/admission";
 import { ownOrigin } from "../auth/config";
 import { implementationConnector } from "./connector";
-import { checkoutOf } from "../experiments/connections";
 import type { Connection, Connections } from "../experiments/connections";
 import type { Source } from "@chopin/experiment";
 import type { HostedAuth } from "../auth/routes";
@@ -65,6 +58,8 @@ type Options = {
 	 * the connection said it has, at the plan source's commit when there is one.
 	 */
 	sourceFor?: (connection: Connection, documentId: string, plan?: PlanSource) => Promise<Source>;
+	/** Starts a Planner task-drafting turn when programmatic `build_plan` needs a current graph. */
+	draftBuild?: DraftBuildStarter;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
@@ -106,16 +101,6 @@ async function body<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
 }
 
 /**
- * The person's machine choice refuses the work: the machine they chose is offline or no longer
- * takes their work (409), or their choice cannot be read right now (503). The message says which.
- */
-class MachineRefused extends Error {
-	constructor(readonly code: string, message: string, readonly status: number) {
-		super(message);
-	}
-}
-
-/**
  * The state on GitHub of each of `urls` in the build's repository, read with the access of the
  * machine that runs the build. A pull request whose state can't be read is left out: unknown.
  */
@@ -151,9 +136,6 @@ async function pullRequestStates(
  * its repository, or a teammate's shared machine whose owner can push there.
  */
 export function registerImplementationRoutes(router: Router, auth: HostedAuth, options: Options) {
-	let takers = options.takers
-		?? (async (owner: string, repositoryId: string, id: string) =>
-			options.connections.candidates(repositoryId, owner, id));
 	let connector = implementationConnector(
 		options.withPlan,
 		options.connections,
@@ -185,6 +167,18 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			pullRequestStates: (build, urls) => pullRequestStates(auth, build, urls),
 		},
 	);
+	let starter = createBuildStarter({
+		withPlan: options.withPlan,
+		connections: options.connections,
+		connector,
+		busy: options.busy,
+		liveBuild: options.liveBuild,
+		refuseOffline: options.refuseOffline,
+		takers: options.takers,
+		machineChoices: options.machineChoices,
+		sourceFor: options.sourceFor,
+		draftBuild: options.draftBuild,
+	});
 	let safe = (handler: RouteHandler): RouteHandler => async (request, url, params) => {
 		try {
 			return await handler(request, url, params);
@@ -211,66 +205,6 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			throw new GitHubError("document not found", 404);
 		}
 		return { session, channel, repository };
-	}
-	/**
-	 * The live connections that can take the caller's build for `id`: idle ones
-	 * first, then those still running a prototype, then those building another document, which
-	 * queue the build until theirs finishes. Within each, the one last used for this document
-	 * first, then the most recently heard from. A build already waiting on this document does not
-	 * make its connection busy, so a repeated request can return that build.
-	 */
-	async function available(owner: string, repositoryId: string, id: string) {
-		if (!options.liveBuild) {
-			// Without LIVE_BUILD a busy connection is refused, never queued.
-			let idle: Connection[] = [];
-			for (let connection of await takers(owner, repositoryId, id)) {
-				let here = options.connections.assigned(connection.id) === id;
-				if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
-					continue;
-				}
-				if (here) idle.unshift(connection);
-				else idle.push(connection);
-			}
-			return idle;
-		}
-		let free: Connection[] = [];
-		let prototyping: Connection[] = [];
-		let building: Connection[] = [];
-		for (let connection of await takers(owner, repositoryId, id)) {
-			let here = options.connections.assigned(connection.id) === id
-				|| options.connections.queued(connection.id).includes(id);
-			let list = !here && await connector.busy(connection)
-				? building
-				: await options.busy?.(connection.id)
-				? prototyping
-				: free;
-			if (here) list.unshift(connection);
-			else list.push(connection);
-		}
-		return [...free, ...prototyping, ...building];
-	}
-	/**
-	 * Refuse a Build that nothing can take: `machine-offline` naming the machine the person chose
-	 * for the document, never silently another, `machine-unavailable` when it is a teammate's that
-	 * no longer takes their work, `machine-choice-unavailable` while that choice cannot be read, or
-	 * else `no-workspace`.
-	 */
-	async function unavailable(owner: string, repositoryId: string, id: string): Promise<void> {
-		try {
-			await options.machineChoices?.();
-			if ((await takers(owner, repositoryId, id)).length) return;
-			await options.refuseOffline?.(owner, id);
-		} catch (error) {
-			let code = (error as { code?: unknown } | undefined)?.code;
-			if (
-				code === "machine-offline" || code === "machine-unavailable"
-				|| code === "machine-choice-unavailable"
-			) {
-				let message = (error as Error).message;
-				throw new MachineRefused(code, message, code === "machine-choice-unavailable" ? 503 : 409);
-			}
-		}
-		throw new GitHubError("no-workspace", 409);
 	}
 	router.on(
 		"GET",
@@ -377,76 +311,20 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				throw new GitHubError("repository write access is required", 403);
 			}
 			let input = await body(request, buildSchema);
-			await unavailable(session.user.id, channel.repositoryId, id);
-			let [connection] = await available(session.user.id, channel.repositoryId, id);
-			if (!connection) {
-				throw new GitHubError(
-					options.liveBuild ? "no-workspace" : "workspace is offline or busy",
-					409,
-				);
-			}
-			// The plan's files the Planner pushed for this revision, which the build starts from.
-			let planSource = await options.withPlan(
-				id,
-				async plan => planSourceFor(plan.planSources, input.planRevision),
-			);
-			let source: Source | undefined;
-			try {
-				if (options.sourceFor) source = await options.sourceFor(connection, id, planSource);
-				else {
-					source = checkoutOf(connection, channel.repositoryId);
-					if (source && planSource) {
-						source = { ...source, commit: planSource.commit, branch: planSource.branch };
-					}
-				}
-			} catch (error) {
-				let code = (error as { code?: unknown } | undefined)?.code;
-				throw new GitHubError(typeof code === "string" ? code : "no-workspace", 409);
-			}
-			if (!source) throw new GitHubError("no-workspace", 409);
-			let checkout = {
-				repository: source.repository,
-				commit: source.commit,
-				...(source.branch ? { branch: source.branch } : {}),
-			};
-			connector.track(id);
-			return options.connections.locked(connection.id, async () => {
-				if (
-					!options.connections.get(connection.id)
-					|| !options.liveBuild
-						&& !(await available(session.user.id, channel.repositoryId, id)).includes(connection)
-				) {
-					throw new GitHubError(
-						options.liveBuild ? "no-workspace" : "workspace is offline or busy",
-						409,
-					);
-				}
-				return options.withPlan(id, async plan => {
-					try {
-						let build = await queueBuild(plan, {
-							...input,
-							user: session.user.id,
-							...(connection.owner !== session.user.id ? { machineOwner: connection.owner } : {}),
-							connectionId: connection.id,
-							machineId: connection.machineId,
-							...(connection.about?.service ? { machineService: true as const } : {}),
-							repositoryId: channel.repositoryId,
-							checkout,
-							...(planSource ? { planSource } : {}),
-						});
-						let holder = options.connections.assigned(connection.id);
-						// Another document's build holds the connection: this one starts after it.
-						if (options.liveBuild && holder && holder !== id) {
-							options.connections.enqueue(connection.id, id);
-						} else options.connections.assign(connection.id, id);
-						options.connections.use(id, connection.id);
-						options.connections.wake(channel.repositoryId);
-						return json(build);
-					} catch (error) {
-						throw new GitHubError(error instanceof Error ? error.message : "build refused", 409);
-					}
-				});
+			let result = await starter.queueExplicitBuild({
+				documentId: id,
+				repositoryId: channel.repositoryId,
+				userId: session.user.id,
+				approvedBy: session.user.login,
+				...input,
 			});
+			if (!result.ok) {
+				if (result.machineRefused) {
+					throw new MachineRefused(result.code, result.message, result.httpStatus);
+				}
+				throw new GitHubError(result.message, result.httpStatus);
+			}
+			return json(result.build);
 		}),
 	);
 	// Build the edits since the last build onto its pull requests, on the presser's own agent.
@@ -461,48 +339,17 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			if (!repository.permissions.push && !repository.permissions.admin || channel.archivedAt) {
 				throw new GitHubError("repository write access is required", 403);
 			}
-			await unavailable(session.user.id, channel.repositoryId, id);
-			// Like Build: a connection running a prototype or another document's build is busy.
-			let free: Connection[] = [];
-			for (let connection of await takers(session.user.id, channel.repositoryId, id)) {
-				let here = options.connections.assigned(connection.id) === id;
-				if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
-					continue;
+			let result = await starter.queueExplicitRebuild({
+				documentId: id,
+				repositoryId: channel.repositoryId,
+				userId: session.user.id,
+			});
+			if (!result.ok) {
+				if (result.machineRefused) {
+					throw new MachineRefused(result.code, result.message, result.httpStatus);
 				}
-				free.push(connection);
+				throw new GitHubError(result.message, result.httpStatus);
 			}
-			if (!free.length) throw new GitHubError("agent-busy", 409);
-			let idle = new Set(free.map(connection => connection.id));
-			connector.track(id);
-			let result = await options.withPlan(
-				id,
-				plan =>
-					queueRebuild(plan, {
-						...options.connections,
-						get: connectionId =>
-							idle.has(connectionId) ? options.connections.get(connectionId) : undefined,
-						list: (repositoryId, owner) =>
-							[
-								...owner ? options.connections.favoriteShared(repositoryId, owner, id) : [],
-								...options.connections.list(repositoryId, owner),
-								...owner ? options.connections.chosenShared(repositoryId, owner, id) : [],
-							].filter(item => idle.has(item.id)),
-						assign: (connectionId, documentId) =>
-							options.connections.assign(connectionId, documentId),
-						assigned: connectionId => options.connections.assigned(connectionId),
-						allows: (documentId, connection, person) =>
-							options.connections.allows(documentId, connection, person),
-						favoriteShared: (repositoryId, person, documentId) =>
-							options.connections.favoriteShared(repositoryId, person, documentId).filter(item =>
-								idle.has(item.id)
-							),
-					}, { by: session.user.id }),
-			);
-			if (result.kind === "busy") throw new GitHubError("implementation is already active", 409);
-			if (result.kind === "unchanged") throw new GitHubError("nothing to build", 409);
-			if (result.kind === "blocked") throw new GitHubError(result.blockers.join(", "), 409);
-			if (result.kind === "unavailable") throw new GitHubError("no-workspace", 409);
-			options.connections.wake(channel.repositoryId);
 			return json(result.build);
 		}),
 	);
@@ -605,5 +452,5 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			});
 		}),
 	);
-	return connector;
+	return { ...connector, startPlanBuild: starter.startPlanBuild };
 }

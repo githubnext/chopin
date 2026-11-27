@@ -1506,6 +1506,8 @@ export async function readStored(
 	execution?: Run;
 	lifecycle?: Lifecycle;
 	records?: Questions.Record[];
+	openQuestions?: Questions.StoredOpen[];
+	conversationPlan?: ConversationPlan.State;
 	planSources?: PlanSource[];
 }> {
 	let restored = await restoreHosted(loaded.channel.id, loaded);
@@ -1515,6 +1517,12 @@ export async function readStored(
 			source: room.project(restored.document),
 			revision: restored.sidecar.revision,
 			...(restored.sidecar.questions.length > 0 ? { records: restored.sidecar.questions } : {}),
+			...(restored.sidecar.openQuestions.length > 0
+				? { openQuestions: restored.sidecar.openQuestions }
+				: {}),
+			...(restored.sidecar.conversationPlan
+				? { conversationPlan: restored.sidecar.conversationPlan }
+				: {}),
 			...(restored.sidecar.creation ? { creation: restored.sidecar.creation } : {}),
 			...(restored.sidecar.graph ? { graph: restored.sidecar.graph } : {}),
 			...(restored.sidecar.builds ? { builds: restored.sidecar.builds } : {}),

@@ -371,10 +371,10 @@ Chopin's tools available to the Planner under every harness are:
   never offered to background jobs, and unexpected storage errors reach the
   model only as a generic message;
 - `create_document`, which makes new top-level documents for the person whose
-  message drives the turn, and `orchestrate`, which opens, lists, instructs and
-  indexes the documents this one created (see
-  [Creating documents](#creating-documents)); neither is offered to background
-  jobs;
+  message drives the turn, and `orchestrate`, which opens, lists, reads
+  decisions on, answers decisions on, instructs, builds, and indexes the
+  documents this one created (see [Creating documents](#creating-documents));
+  neither is offered to background jobs;
 - bounded file and tree reads plus commit history using the session's default
   branch, or an explicitly supplied full commit ID when inspecting investigation evidence;
 - repository-scoped code search, post-filtered by repository node ID; and
@@ -2044,12 +2044,14 @@ kept, when the creating document is deleted.
 ### Working with created documents
 
 `orchestrate` (`apps/server/src/agent/orchestrate.ts`) lets a document's Planner
-open, inspect, instruct, and index the documents this document created. It is
-offered alongside `create_document` under the same rules: only a turn driven by
-a person's message may call it, that person's live browser login is rechecked
-for write access, and it is never offered to background jobs or child rooms. It
-reaches only unarchived top-level documents in the same repository whose stored
-`createdFrom` link (migration 054) points to this document.
+(and external `/mcp` callers via the matching MCP `orchestrate` tool) open,
+inspect, answer decisions on, instruct, build, and index the documents this
+document created. As a Planner host tool it is offered alongside
+`create_document` under the same rules: only a turn driven by a person's message
+may call it, that person's live browser login is rechecked for write access, and
+it is never offered to background jobs or child rooms. It reaches only
+unarchived top-level documents in the same repository whose stored `createdFrom`
+link (migration 054) points directly to this document (non-transitive).
 
 Each call takes one `operation`:
 
@@ -2060,26 +2062,47 @@ Each call takes one `operation`:
   state (`working` while a turn runs, `idle` while a session or attached
   machine holds it, otherwise `stopped`), open Decisions count, and build state
   (`building`, `built`, `failed`, `stopped`, or `not built`).
+- **`decisions`** reads decisions across all or named (`targets`) created
+  documents with optional `status` (`all`, a single status, or a non-empty list)
+  and `origin` (`planner`, `conversation`, `human`) filters, returning each
+  document's filtered snapshots and document-wide `decisionCounts`.
+- **`answer`** settles one open or reopened decision on a created `target`
+  document (`decisionId` card or question ID, open `revision`,
+  `idempotencyKey`, and `optionIds`/`text`/`answers`) through the shared
+  atomic decision core with full Planner handoff parity.
 - **`instruct`** posts one `instruction` (up to 64 KiB) to every created
   document's Chat—or only to `targets` matched by `id` or `url`—as the person's
-  message, exactly as `invoke_planner` does, starting stopped Planners. It
-  reports each document's outcome; a busy Planner returns `planner-busy` and
-  can be retried later. Any target not created from this document is returned
-  in `unknown`.
+  message, exactly as `invoke_planner` does: starting idle/stopped Planners and
+  steering/nudging live working Planners (`steered: true`) when their harness
+  supports mid-run input. A busy Planner on a non-steerable harness returns
+  `planner-busy` and can be retried once its turn ends. Any target not created
+  from this document is returned in `unknown`.
+- **`build`** starts builds across all or named (`targets`) created documents
+  through the shared `build_plan` core (`draftIfNeeded` default `true`,
+  `requireSettledDecisions` default `false`, `retry`, `rebuild`), returning
+  per-document status (`started`, `drafting`, `already-building`, `rebuilding`,
+  or `refused`) and refreshing an existing index table.
 - **`index`** writes or updates a table of the created documents under the
   heading `## Documents created from this one` (`orchestrate-index.ts`). Chopin
   owns only that heading and the one block after it; the rest of the document
-  is left alone. `open` and `list` refresh an existing table, and nothing is
-  written when the table would not change.
+  is left alone. `open`, `list`, `answer`, and `build` refresh an existing
+  table, and nothing is written when the table would not change.
+
+A paired machine's **Planner** MCP launch token (`experiments/routes.ts`) can
+also reach its document's direct same-repository top-level `createdFrom`
+documents (non-transitive) in addition to the document itself and its direct
+children; **run** launch tokens remain restricted strictly to their own
+document.
 
 **Limits:**
 
 - Documents created before `createdFrom` (migration 054) have no parent link,
-  so `orchestrate` cannot list, instruct, or index them.
-- The index table refreshes only when `open`, `list`, or `index` runs; Chopin
-  does not push status changes into the parent document automatically.
-- `open` accepts at most 20 documents per call; `list`, `instruct`, and `index`
-  cover up to 200 created documents.
+  so `orchestrate` cannot list, inspect, answer, instruct, build, or index them.
+- The index table refreshes only when `open`, `list`, `answer`, `build`, or
+  `index` runs; Chopin does not push status changes into the parent document
+  automatically.
+- `open` accepts at most 20 documents per call; `list`, `decisions`, `instruct`,
+  `build`, and `index` cover up to 200 created documents.
 
 ## Background jobs
 

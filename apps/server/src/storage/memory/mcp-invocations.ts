@@ -1,6 +1,6 @@
 import { missing } from "../errors";
 
-import type { Lease, McpInvocation, McpInvocationScope } from "../model";
+import type { Lease, McpInvocation, McpInvocationResult, McpInvocationScope } from "../model";
 import type { McpInvocationStore } from "../port";
 
 function copy(value: McpInvocation): McpInvocation {
@@ -39,10 +39,16 @@ export class MemoryMcpInvocationStore implements McpInvocationStore {
 		this.#records.set(key, copy(invocation));
 		return { record: copy(invocation), claimed: true };
 	}
-	async complete(lease: Lease, scope: McpInvocationScope & { entryId: string }, at: Date) {
+	async complete(
+		lease: Lease,
+		scope: McpInvocationScope & { entryId: string },
+		at: Date,
+		result?: McpInvocationResult,
+	) {
 		this.deps.assertLease(lease);
 		let held = this.#records.get(scopeKey(scope));
 		if (!held || held.invokedAt || held.uncertainAt || held.entryId !== scope.entryId) return false;
+		if (result !== undefined) held.result = structuredClone(result);
 		held.invokedAt = new Date(at);
 		return true;
 	}

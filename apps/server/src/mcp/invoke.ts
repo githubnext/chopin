@@ -27,8 +27,8 @@ import type { InvokePlanner, InvokePlannerError } from "../mcp";
 import type {
 	Lease,
 	McpInvocation,
-	McpInvocationResult,
 	McpInvocationScope,
+	McpInvokePlannerResult,
 } from "../storage/model";
 import type { ChannelStore, McpInvocationStore } from "../storage/port";
 import type { PlannerInvocation } from "./hosted";
@@ -228,7 +228,7 @@ export class IdempotentInvocations {
 	run(
 		scope: McpInvocationScope,
 		fingerprint: string,
-		result: McpInvocationResult,
+		result: McpInvokePlannerResult,
 		deliver: (keyed: KeyedInvocation) => Promise<Invoked>,
 	): Promise<Invoked> {
 		let key = JSON.stringify([scope.userId, scope.channelId, scope.key]);
@@ -246,7 +246,7 @@ export class IdempotentInvocations {
 		key: string,
 		scope: McpInvocationScope,
 		fingerprint: string,
-		result: McpInvocationResult,
+		result: McpInvokePlannerResult,
 		deliver: (keyed: KeyedInvocation) => Promise<Invoked>,
 	): Promise<Invoked> {
 		let lease = this.lease();
@@ -268,7 +268,7 @@ export class IdempotentInvocations {
 				return { kind: "refused", code: "idempotency-conflict" };
 			}
 			return record.invokedAt
-				? { kind: "invoked", document: record.result.document }
+				? { kind: "invoked", document: (record.result as McpInvokePlannerResult).document }
 				: { kind: "refused", code: "planner-unavailable", message: UNCONFIRMED };
 		}
 		let unrecorded = this.#unrecorded.get(key);
@@ -323,7 +323,7 @@ export class IdempotentInvocations {
 		}
 		if (this.#unrecorded.get(key)?.entryId === claim.entryId) this.#unrecorded.delete(key);
 		return outcome === "reached"
-			? { kind: "invoked", document: claim.result.document }
+			? { kind: "invoked", document: (claim.result as McpInvokePlannerResult).document }
 			: { kind: "refused", code: "planner-unavailable", message: UNCONFIRMED };
 	}
 }

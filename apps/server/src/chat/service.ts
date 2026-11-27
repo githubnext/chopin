@@ -171,6 +171,8 @@ export type TaskDraft = {
 	state: "running";
 	/** The running turn, once it has begun. */
 	turn?: string;
+	/** In-memory listeners called once after the draft turn finishes and persists. */
+	ended?: Array<() => void>;
 };
 
 export type ActiveMemberRequest = {
@@ -2250,13 +2252,14 @@ export async function draftTasks(
 	planRevision: number,
 	text: string,
 	said: string,
+	onEnded?: () => void,
 ): Promise<TaskDraftResult> {
 	let { chat } = context;
 	if (chat.pendingSends >= MAX_PENDING_SENDS) {
 		return { ok: false, reason: `${PLANNER_NAME} is busy. Try again in a moment.` };
 	}
 	chat.pendingSends++;
-	let post = () => postDraft(context, handle, planRevision, text, said);
+	let post = () => postDraft(context, handle, planRevision, text, said, onEnded);
 	let accepted = chat.sending.then(post, post);
 	let completed = accepted.finally(() => chat.pendingSends--);
 	chat.sending = completed.then(() => {}, () => {});
@@ -2269,6 +2272,7 @@ async function postDraft(
 	planRevision: number,
 	text: string,
 	said: string,
+	onEnded?: () => void,
 ): Promise<TaskDraftResult> {
 	let { chat, config, server, room } = context;
 	if (!config.agent) return { ok: false, reason: `${PLANNER_NAME} is not running` };
@@ -2276,9 +2280,20 @@ async function postDraft(
 	let unattached = await context.plannerNotAttached?.();
 	if (unattached) return { ok: false, reason: unattached, code: "planner-not-attached" };
 	let existing = liveDraft(chat);
-	if (existing) return { ok: true, draft: existing, state: existing.state, existing: true };
+	if (existing) {
+		if (onEnded) {
+			existing.ended ??= [];
+			existing.ended.push(onEnded);
+		}
+		return { ok: true, draft: existing, state: existing.state, existing: true };
+	}
 	if (occupied(chat)) return { ok: false, reason: BUSY_DRAFT };
-	let draft: TaskDraft = { id: ulid(), planRevision, state: "running" };
+	let draft: TaskDraft = {
+		id: ulid(),
+		planRevision,
+		state: "running",
+		...(onEnded ? { ended: [onEnded] } : {}),
+	};
 	chat.draft = draft;
 	let abandon = (reason: string): TaskDraftResult => {
 		if (chat.draft === draft) chat.draft = undefined;
@@ -2313,7 +2328,8 @@ async function postDraft(
 	};
 }
 
-const BUSY_DRAFT = `${PLANNER_NAME} is working on something else. Try again when it has finished.`;
+export const BUSY_DRAFT =
+	`${PLANNER_NAME} is working on something else. Try again when it has finished.`;
 
 let jobState = safeProjection(state);
 let { job, cancelQueuedJobs, stopAfterPersistenceFailure } = createJobQueue({
@@ -3532,6 +3548,14 @@ async function run(
 		if (draft) {
 			if (chat.draft === draft) chat.draft = undefined;
 			drafting(server, room, draft, "ended");
+			let listeners = draft.ended?.splice(0) ?? [];
+			for (let notify of listeners) {
+				try {
+					notify();
+				} catch (error) {
+					console.error("[chat] draft completion hook failed:", error);
+				}
+			}
 		}
 	}
 

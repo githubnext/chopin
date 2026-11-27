@@ -67,6 +67,19 @@ describe("the MCP document protocol", () => {
 			archive: { archive: unavailable },
 			restore: { restore: unavailable },
 			invoke: { invoke: async () => ({ kind: "refused", code: "planner-unavailable" }) },
+			answerDecision: {
+				answer: async () => ({ kind: "refused", refusal: { code: "document-unavailable" } }),
+			},
+			buildPlan: {
+				build: async () => ({ status: "refused", code: "document-unavailable" }),
+			},
+			orchestrate: {
+				orchestrate: async () => ({
+					ok: false,
+					reason: "document-unavailable",
+					message: "unavailable",
+				}),
+			},
 			upload: { upload: unavailable },
 			planSources: { record: unavailable },
 			implementations: {

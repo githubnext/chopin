@@ -241,64 +241,84 @@ type BuildInput = {
 	checkout: CheckoutContext;
 	/** The plan source `checkout` starts from, as it was when the build was asked for. */
 	planSource?: PlanSource;
+	/** Approval provenance recorded on the graph version when transitioning draft -> approved. */
+	approvedBy?: string;
+	operationKey?: string;
+	/** When set, requires `plan.buildRequested?.by === requireBuildRequestedBy` atomically. */
+	requireBuildRequestedBy?: string;
 };
 
 export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRequest> {
+	let { approvedBy, operationKey, requireBuildRequestedBy, ...buildFields } = input;
 	let claiming = plan.claiming;
 	plan.claiming = true;
 	try {
 		await drain(plan);
 		return await exclusive(plan, async () => {
+			if (
+				requireBuildRequestedBy !== undefined
+				&& plan.buildRequested?.by !== requireBuildRequestedBy
+			) {
+				throw new Error("build request was cancelled");
+			}
 			let version = plan.graph?.versions.at(-1);
 			if (
-				!version || input.planRevision !== plan.revision
-				|| version.planRevision !== input.planRevision || version.number !== input.graphVersion
-				|| version.revision !== input.graphRevision
+				!version || buildFields.planRevision !== plan.revision
+				|| version.planRevision !== buildFields.planRevision
+				|| version.number !== buildFields.graphVersion
+				|| version.revision !== buildFields.graphRevision
 			) throw new Error("reviewed graph has changed");
 			// A source recorded for the revision while the press was checked comes in a new press.
-			let recorded = planSourceFor(plan.planSources, input.planRevision);
+			let recorded = planSourceFor(plan.planSources, buildFields.planRevision);
 			if (
-				recorded?.revision !== input.planSource?.revision
-				|| recorded?.commit !== input.planSource?.commit
-				|| recorded?.branch !== input.planSource?.branch
+				recorded?.revision !== buildFields.planSource?.revision
+				|| recorded?.commit !== buildFields.planSource?.commit
+				|| recorded?.branch !== buildFields.planSource?.branch
 			) throw new Error("plan source has changed");
 			let existing = plan.builds.at(-1);
 			if (
-				existing && existing.graphVersion === input.graphVersion
-				&& existing.graphRevision === input.graphRevision
-				&& existing.planRevision === input.planRevision
+				existing && existing.graphVersion === buildFields.graphVersion
+				&& existing.graphRevision === buildFields.graphRevision
+				&& existing.planRevision === buildFields.planRevision
 			) {
-				let sameOwnerAndCheckout = existing.user === input.user
-					&& existing.machineOwner === input.machineOwner
-					&& existing.connectionId === input.connectionId
-					&& existing.repositoryId === input.repositoryId
-					&& existing.checkout.repository === input.checkout.repository
-					&& existing.checkout.commit === input.checkout.commit
-					&& existing.checkout.branch === input.checkout.branch;
-				if (sameOwnerAndCheckout && existing.retryOf === input.retryOf) {
+				let sameOwnerAndCheckout = existing.user === buildFields.user
+					&& existing.machineOwner === buildFields.machineOwner
+					&& existing.connectionId === buildFields.connectionId
+					&& existing.repositoryId === buildFields.repositoryId
+					&& existing.checkout.repository === buildFields.checkout.repository
+					&& existing.checkout.commit === buildFields.checkout.commit
+					&& existing.checkout.branch === buildFields.checkout.branch;
+				if (sameOwnerAndCheckout && existing.retryOf === buildFields.retryOf) {
 					return structuredClone(existing);
 				}
-				if (input.retryOf !== existing.id || !["failed", "stopped"].includes(existing.state)) {
+				if (
+					buildFields.retryOf !== existing.id || !["failed", "stopped"].includes(existing.state)
+				) {
 					throw new Error("review the existing build before retrying");
 				}
-			} else if (input.retryOf) {
+			} else if (buildFields.retryOf) {
 				throw new Error("reviewed build has changed");
 			}
 			if (
 				plan.execution
 				|| plan.builds.some(build => ["queued", "starting", "running"].includes(build.state))
 			) throw new Error("implementation is already active");
-			let ready = await planningReadiness(plan, input.planRevision);
+			let ready = await planningReadiness(plan, buildFields.planRevision);
 			if (!ready.ok) throw new Error(ready.blockers.join(", "));
 			let id = crypto.randomUUID();
 			let eligibility = claimEligibility(plan.lifecycle, version, id);
 			if (!eligibility.ok) throw new Error(eligibility.reason);
 			let result = version.state === "approved"
 				? { ok: true as const, value: structuredClone(plan.graph!) }
-				: approveGraph({ graph: plan.graph, revision: plan.revision });
+				: approveGraph({
+					graph: plan.graph,
+					revision: plan.revision,
+					...(approvedBy ? { approvedBy } : {}),
+					...(operationKey ? { operationKey } : {}),
+				});
 			if (!result.ok) throw new Error(result.reason);
 			let build: BuildRequest = buildSchema.parse({
-				...input,
+				...buildFields,
 				id,
 				createdAt: new Date().toISOString(),
 				expiresAt: Date.now() + 90_000,

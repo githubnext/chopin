@@ -1303,10 +1303,13 @@ export type McpInvocationScope = {
 	key: string;
 };
 
-/** What a call answers once its instruction's turn starts, given again to every retry. */
-export type McpInvocationResult = {
+/** What an `invoke_planner` call answers once its instruction's turn starts. */
+export type McpInvokePlannerResult = {
 	document: { id: string; title: string; description?: string; url: string };
 };
+
+/** What a keyed MCP call answers once settled, given again to every retry. */
+export type McpInvocationResult = McpInvokePlannerResult | { [key: string]: unknown };
 
 export type McpInvocation = McpInvocationScope & {
 	fingerprint: string;

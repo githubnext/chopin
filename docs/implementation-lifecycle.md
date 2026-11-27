@@ -20,10 +20,12 @@ implementation, automatic restart and an installer remain future work.
 - The **hosted Planner** reads the current plan and drafts or revises tasks with
   `read_implementation_graph` and `edit_implementation_graph`.
 - A **person** is the only actor allowed by the domain model to approve a draft.
-  The header's **Build plan** press approves the exact drafted
-  graph and queues it, with the connection and checkout of the machine the clicker
-  chose (their own, or a teammate's shared one, recorded as `machineOwner`), in one
-  durable commit.
+  The header's **Build plan** press—or a write-authorized caller invoking MCP
+  `build_plan` (or `orchestrate build`)—approves the exact drafted graph (recording
+  optional `approvedBy` and `operationKey` provenance on the graph version) and
+  queues it, with the connection and checkout of the machine chosen for the
+  document (their own, or a teammate's shared one, recorded as `machineOwner`), in
+  one durable commit.
 - The **local connector** creates an exact-commit worktree and ACP session, then
   claims a browser-approved graph before prompting the orchestrator. Its scoped
   bridge fixes document and run identity for lifecycle reports.
@@ -186,6 +188,7 @@ opens. The next reviewed build is a new attempt, not an automatic session replay
 
 | Tool                   | Purpose                                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------- |
+| `build_plan`           | Start (or draft-then-start, retry, or rebuild) a document's build on a paired machine.      |
 | `read_implementation`  | Read the approved graph, plan, and repository context by UUID or canonical URL.             |
 | `start_implementation` | Claim that exact graph while reporting the coding agent's repository, branch, and commit.   |
 | `start_task`           | Move one dependency-ready task to in progress.                                              |
@@ -194,6 +197,16 @@ opens. The next reviewed build is a new attempt, not an automatic session replay
 | `complete_task`        | Complete a task after its pull request is recorded, or with `noChange` when none is needed. |
 | `report_verification`  | Submit graph-wide review evidence and return failed tasks to work.                          |
 | `request_revision`     | End the run when the plan, criteria, tasks, or dependencies must change.                    |
+
+`build_plan` shares `apps/server/src/tasks/start-build.ts` with the browser's
+implementation routes and `orchestrate build`. Open decisions do not block by
+default (matching browser Build parity); pass `requireSettledDecisions: true` to
+require every decision to be settled first. When the graph is missing or stale
+and `draftIfNeeded` is `true` (default), Chopin starts a Planner task-drafting
+turn, sets `buildRequested`, and auto-queues the build inside `exclusive(plan)`
+once a current graph is saved (clearing `buildRequested` if drafting fails,
+stops without saving, or cannot queue). See
+[Starting builds with `build_plan`](local-agent-mcp.md#starting-builds-with-build_plan).
 
 Every post-claim lifecycle report carries a caller-generated idempotency key.
 `start_implementation` does not; the service creates a fresh run ID when it
