@@ -1521,6 +1521,8 @@ export async function readStored(
 				? { openQuestions: restored.sidecar.openQuestions }
 				: {}),
 			...(restored.sidecar.conversationPlan
+					&& (restored.sidecar.conversationPlan.threads.length > 0
+						|| restored.sidecar.conversationPlan.events.length > 0)
 				? { conversationPlan: restored.sidecar.conversationPlan }
 				: {}),
 			...(restored.sidecar.creation ? { creation: restored.sidecar.creation } : {}),
