@@ -232,7 +232,7 @@ async function fakeAgentStore(directory: string) {
 	let adapter = await storeAdapter(directory, async root => {
 		let dir = join(root, "node_modules", ...MACHINE_STORE_ADAPTER.split("/"));
 		mkdirSync(dir, { recursive: true });
-		writeFileSync(join(dir, "package.json"), JSON.stringify({ version: "0.10.12" }));
+		writeFileSync(join(dir, "package.json"), JSON.stringify({ version: "0.10.14" }));
 	});
 	return new AgentStore(STORE_LOGIN, adapter);
 }

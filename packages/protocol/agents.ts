@@ -91,7 +91,7 @@ export const AGENTS: readonly CodingAgent[] = [
 		name: "Atomic",
 		install: [["npm", "install", "-g", "@bastani/atomic", "@bastani/atomic-acp"]],
 		signIn: { command: ["atomic"], afterward: "sign in with /login, then quit" },
-		image: ["@bastani/atomic@0.10.12", "@bastani/atomic-acp@0.0.18"],
+		image: ["@bastani/atomic@0.10.14", "@bastani/atomic-acp@0.0.18"],
 		acp: ["atomic-acp"],
 		// atomic-acp passes the arguments after its own -- to every Atomic it starts.
 		passthrough: ["--"],

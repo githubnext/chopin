@@ -222,7 +222,7 @@ async function installedAdapter(home: string) {
 		"atomic-storage-postgres",
 	);
 	await mkdir(adapter, { recursive: true });
-	await writeFile(join(adapter, "package.json"), JSON.stringify({ version: "0.10.12" }));
+	await writeFile(join(adapter, "package.json"), JSON.stringify({ version: "0.10.14" }));
 }
 
 test("pairing sets up the machine's database login in the same step, readable only by its owner", async () => {
