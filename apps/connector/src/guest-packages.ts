@@ -136,9 +136,9 @@ export const GUEST_PACKAGES: readonly GuestPackage[] = [
 	},
 	{
 		name: "libexpat1",
-		version: "2.7.4-1ubuntu0.2",
-		path: "pool/main/e/expat/libexpat1_2.7.4-1ubuntu0.2_amd64.deb",
-		sha256: "0063e68d742facfd3c46d7d7df9eb0d85f13e0fc294908a4f138d45557607837",
+		version: "2.7.4-1ubuntu0.3",
+		path: "pool/main/e/expat/libexpat1_2.7.4-1ubuntu0.3_amd64.deb",
+		sha256: "9204c4d870591e984903b3ebb78c5b1bcd684f3722acc014d5b59df4cf78b55e",
 	},
 ];
 
