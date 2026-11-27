@@ -317,8 +317,8 @@ plan revision last read, with the same dialect validation and an idempotency key
 that returns the original applied result on replay.
 
 The Planner's `create_document` and `orchestrate` (`open`) tools go through the
-same creation transaction from a member's turn: each draft is validated and
-assessed for visuals as MCP's, its repository and base branch are the creating
+same creation transaction from a member's turn: each draft is validated in the
+plan dialect just as MCP's is, its repository and base branch are the creating
 document's (the base it recorded, else the default branch's current commit),
 its idempotency key is scoped to the creating document, and it records the
 creating document in `createdFrom` (migration 054). See

@@ -415,26 +415,13 @@ REST tools construct owner and repository coordinates on the server, bound
 response sizes and line ranges, reject path escape, and post-filter code search
 by GitHub repository node ID.
 
-Foreground Planner writes on every harness and MCP document creation and updates
-share a server-owned visual admission check. New prose, lists and nested passages
-are assessed for whether a faithful visual is possible, helpful, and which native
-type fits. A selected diagram or comparison table must appear beside its passage
-before the write is accepted. A successful prose judgment permits prose; there is
-no diagram quota. This applies to blank drafts, long requests, and imported plans
-without requiring `PLANNER_VISUALS`.
-
-Assessments run in bounded batches outside the room queue. Failed or malformed
-assessments refuse the write. Admission follows the shared assessment's probability
-thresholds and selected type, including an explicit no-suitable-type result. It
-does not add a confidence veto: confidence describes competition between types,
-not whether the document write is valid. Every selected visual is still required
-and validated. Refusals identify the passage and required representation and
-include syntax guidance for repair.
-Successful assessments are cached by passage and context while diagrams are
-repaired. Unchanged prose with its existing visual is preserved. A concurrent edit
-still invalidates the proposed revision. Background jobs retain their isolated
-contracts. The legacy `assess_visual` single-paragraph handoff remains available
-to sessions without the shared gate.
+Document writes through Planner tools (`edit_plan`, `edit_child`,
+`write_decision_scope`, `create_document`, `orchestrate`) and MCP
+(`create_document`, `update_document`) are validated against the plan dialect
+before saving, without an additional server-side visual admission gate. Default
+document shape and visual authoring suggestions yield to any specific document
+format, section template, or diagram convention supplied by the Planner's
+session, repository instructions, or loaded skills.
 
 The isolated Planner does not see a user's local checkout, current branch, working tree,
 or uncommitted changes. A coding agent must compare the repository context
@@ -2002,14 +1989,14 @@ holds its rules:
   `invoke_planner` message drives may create documents; a turn nobody typed, a comment turn and a
   background job are refused. That person is the creator. Their own live browser
   login is asked again for push or administration access to the repository, as
-  `chat:send` is, both before and after the visual assessment; the Planner owner's
+  `chat:send` is; the Planner owner's
   credential never authorizes a new document. A person with no live login is
   refused.
 - **What it makes.** A top-level document in the creating document's repository,
   with its own Chat, Decisions and Planner session, sharing no transcript with the
   creating one. Its recorded base is the creating document's own (from its MCP
   creation), or else the repository's default branch at its current commit. The
-  draft goes through MCP's `prepare` and the same visual assessment
+  draft goes through MCP's `prepare` validation
   (`createDocument` in `apps/server/src/mcp/hosted.ts` serves both). It is given
   the creating document's model and thinking level, stored with the creator as
   its chooser in the same transaction that creates the document, fenced by the
@@ -2143,27 +2130,23 @@ completed description, if any, remains visible while work is pending or failed.
 
 ## Diagrams and wireframes
 
-The prompt teaches two validated fence languages. `seecode` holds a JSON spec
-for any registered SeeCode diagram or numerical chart. The ordinary prompt lists
-the full native catalog, including bar, line, scatter, radar, polar, waterfall,
-treemap, heatmap, and Sankey. Numerical aliases have variant-specific purpose
-and data requirements; the guide includes labelled synthetic bar, Marimekko and
-dumbbell examples that are checked against the renderer.
-This capability and the shared visual admission check do not require `PLANNER_VISUALS`.
-Ordinary and Atomic Planners
-prefer native `seecode` whenever a registered type can represent the required
-information. Mermaid is a fallback only for a representation the native catalogue
-cannot provide or an explicit user request; it supports numerical charts such as
-pie and bar/line charts. Jev-routed diagrams must keep the selected native type
-and SeeCode fence, with no Mermaid substitution. `wireframe` holds an indented
-outline of interface parts for layouts and mockups; the prompt asks for low
-fidelity (short labels on key areas, `lines`, `image` and `grid` with `repeat`
-for content, `w=` and `flush` for proportions and app chrome) and forbids
-box-drawing or ASCII art in text fences. `edit_plan` and MCP `update_document`
-refuse a batch that introduces or changes an invalid fence of either language;
-a wireframe refusal names the failing lines, counted inside the fence. An
-unchanged malformed fence, such as one a person left mid-edit, is carried
-through unrelated edits and moves rather than blocking them.
+The prompt documents three diagram and layout fence languages alongside Markdown
+tables and uploaded images: `seecode` (a JSON spec for registered SeeCode
+diagrams and numerical charts, with the full catalog including bar, line,
+scatter, radar, polar, waterfall, treemap, heatmap, and Sankey plus labelled
+synthetic bar, Marimekko, and dumbbell examples checked against the renderer),
+`mermaid` (diagrams and numerical charts such as `pie` and `xychart-beta`
+bar/line charts), and `wireframe` (an indented outline of low-fidelity interface
+parts for layouts and mockups, using short labels on key areas, `lines`, `image`,
+and `grid` with `repeat` for content, `w=` and `flush` for proportions and app
+chrome, instead of box-drawing or ASCII art in text fences). The Planner is free
+to pick whichever supported representation best fits the document's format and
+conventions; there is no server-side visual admission gate forcing a specific
+fence type. `edit_plan` and MCP `update_document` refuse a batch that introduces
+or changes an invalid `seecode` or `wireframe` fence; a wireframe refusal names
+the failing lines, counted inside the fence. An unchanged malformed fence, such
+as one a person left mid-edit, is carried through unrelated edits and moves
+rather than blocking them.
 
 ## Implementation graph status
 

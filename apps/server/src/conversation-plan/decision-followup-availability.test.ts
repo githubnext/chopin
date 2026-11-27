@@ -21,7 +21,6 @@ async function setup() {
 			source: "Offline operation is required.",
 		},
 	});
-	auth.context.visualAdmission = async () => [];
 	auth.onResult(async () => {
 		auth.driver.finish();
 	});

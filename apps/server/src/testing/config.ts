@@ -27,7 +27,6 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		CONVERSATION_PLAN: undefined,
 		CONVERSATION_INITIATIVE_MODEL: undefined,
 		CONVERSATION_INITIATIVE_SILENCE_MS: undefined,
-		PLANNER_VISUALS: undefined,
 		JEV_API_KEY: "synthetic-test-key",
 		DECISIONS_MODEL: undefined,
 		DECISIONS_TIMEOUT_MS: undefined,

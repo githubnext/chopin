@@ -40,7 +40,6 @@ import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
 import type { OrchestrateRequest, OrchestrateResult } from "../agent/orchestrate";
-import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import type { TellChat } from "./thread-notes";
 import * as Service from "../plan/service";
@@ -90,7 +89,6 @@ import type { TextStreamPart, ToolSet } from "ai";
 import type { Chat as Wire, ConversationPlan, Request } from "@chopin/protocol";
 import type { Config } from "../config";
 import type { Decide } from "../conversation-plan/decisions";
-import type { JevRequest } from "../conversation-plan/jev";
 import type { HostedAuth } from "../auth/routes";
 import type { HostedRepository } from "../agent/repository";
 import type { JobService } from "../jobs/service";
@@ -831,8 +829,6 @@ export type Room = {
 	config: Config;
 	/** The deployment's decisions boundary; absent when no decisions model is configured. */
 	decide?: Decide;
-	/** Shared admission for new Planner-authored passages, independent of harness or request kind. */
-	visualAdmission?: VisualAdmission;
 	auth: HostedAuth;
 	/**
 	 * Login session that may claim Planner ownership for this room's turns.
@@ -2474,16 +2470,6 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 	return active;
 }
 
-function visualRouting(context: Room): boolean {
-	if (
-		context.visualAdmission || !context.config?.plannerVisuals || !context.decide
-		|| context.chat.job
-		|| context.config.harness !== "copilot-sdk"
-	) return false;
-	let request = currentMemberRequest(context.chat);
-	return !!request && request.text.length <= 1_000;
-}
-
 export function documentRoom(context: Room): DocumentRoom {
 	let { chat, plan, room, server } = context;
 	return {
@@ -2501,17 +2487,6 @@ export function documentRoom(context: Room): DocumentRoom {
 		turnSignal: () => chat.turnController?.signal,
 		...(context.threadAsked && { decisionsAsked: context.threadAsked }),
 		...(context.unsentDecisions && { unsentDecisions: context.unsentDecisions }),
-		...((!chat.job || chat.job.kind === "decision-followup") && context.visualAdmission && {
-			visualAdmission: input => {
-				let signals = [input.signal, chat.turnController?.signal].filter(
-					(signal): signal is AbortSignal => !!signal,
-				);
-				return context.visualAdmission!({
-					...input,
-					signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0],
-				});
-			},
-		}),
 		...(!chat.job && {
 			checkReply: (text, signal) =>
 				checkPlannerReply(
@@ -2589,12 +2564,6 @@ export function documentRoom(context: Room): DocumentRoom {
 				binding.release();
 			}
 		},
-		...(visualRouting(context) && {
-			visual: {
-				ask: (request: JevRequest) =>
-					context.decide!(request, { signal: chat.turnController?.signal }),
-			},
-		}),
 		readReference: async (id, repositoryId) => {
 			let reference = chat.referenceCache.get(id);
 			if (!reference) throw new Error("reference is not available in this Planner session");
@@ -2960,7 +2929,6 @@ async function repositorySession(
 					`${repository.owner}/${repository.name}`,
 					bootstrapInPrompt ? undefined : chosen,
 					workspace,
-					visualRouting(context),
 					noting,
 				);
 			},

@@ -34,7 +34,6 @@ describe("the rule every writer is given", () => {
 		expect(PROMPT).toContain(NAMES_AS_WRITTEN);
 		let places = [
 			plannerInstructions("octo-org/score"),
-			plannerInstructions("octo-org/score", undefined, undefined, true),
 			plannerInstructions("octo-org/score", undefined, { remote: true }),
 			plannerInstructions("octo-org/score", undefined, { cwd: "/tmp/scratch", checkout: false }),
 		];

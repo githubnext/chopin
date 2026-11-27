@@ -79,19 +79,6 @@ describe("configuration", () => {
 		).toEqual({ maxBytes: 1000, maxCount: 5, maxTotalBytes: 3000 });
 	});
 
-	it("keeps foreground visuals opt-in and requires a decisions model", () => {
-		expect(configured().plannerVisuals).toBe(false);
-		expect(configured({ JEV_API_KEY: "test-key" }).plannerVisuals).toBe(false);
-		expect(configured({ PLANNER_VISUALS: "on", JEV_API_KEY: "test-key" }).plannerVisuals)
-			.toBe(true);
-		expect(() => configured({ PLANNER_VISUALS: "on", JEV_API_KEY: undefined }))
-			.toThrow("A decisions model is required when PLANNER_VISUALS=on");
-		expect(
-			configured({ AGENT: "off", PLANNER_VISUALS: "on", JEV_API_KEY: "test-key" })
-				.plannerVisuals,
-		).toBe(false);
-	});
-
 	it("recommends the bundled connector's release unless CONNECTOR_VERSION names one", async () => {
 		let { version } = await Bun.file(
 			new URL("../../connector/package.json", import.meta.url),

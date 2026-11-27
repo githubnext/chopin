@@ -1,6 +1,6 @@
 import * as Anchors from "./anchors";
 import { parse } from "@chopin/dialect";
-import { SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
+import { MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
 
 import * as Prose from "./prose";
 import * as room from "../plan/room";
@@ -219,7 +219,9 @@ export function place(plan: Plan, updates: Placement[]): room.Mutation | undefin
 				// Old placements may already have separated the paragraph from its visual.
 				if (block.type === "mdxJsxFlowElement" && block.name === "Questionnaire") continue;
 				if (
-					block.type !== "table" && !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
+					block.type !== "table"
+					&& !(block.type === "code"
+						&& (block.lang === SEECODE_LANGUAGE || block.lang === MERMAID_LANGUAGE))
 				) break;
 				at = { index, digest: digests[index]! };
 			}

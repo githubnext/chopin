@@ -12,7 +12,6 @@ import * as Arguments from "./arguments";
 import { ASK_PLAN_SCHEMA, OPEN_DECISIONS_SCHEMA } from "./decision-schema";
 import * as OpenDecisions from "./open-decisions";
 import {
-	admitBlockEdit,
 	answer,
 	applyAnchors,
 	applyBlockEdit,
@@ -41,8 +40,6 @@ import type { IndexWriter, OrchestrateArguments, OrchestrateResult } from "./orc
 import type { InvestigationTools } from "./experiment-tools";
 
 import type { ActiveOwnerBinding } from "./active-owner";
-import type { VisualSession } from "./visual-handoff";
-import type { VisualAdmission } from "./visual-admission";
 
 import type { Server } from "bun";
 import { jsonSchema, tool } from "ai";
@@ -125,14 +122,6 @@ function draftNote(plan: { live?: unknown }): string {
 			+ "is no other approval step. Don't say it needs approval; say that Build plan builds it.";
 }
 
-function sameMemberRequest(
-	current: ActiveMemberRequest | undefined,
-	expected: Pick<ActiveMemberRequest, "entryId" | "turnId" | "lifecycle">,
-): boolean {
-	return !!current && current.entryId === expected.entryId
-		&& current.turnId === expected.turnId && current.lifecycle === expected.lifecycle;
-}
-
 function researchQuestion(raw: unknown): string {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
 		throw new Error("create_research_workspace arguments must be an object");
@@ -210,10 +199,6 @@ export type DocumentRoom = {
 	createResearch?: (question: string) => Promise<ResearchWorkspaceRequest>;
 	/** Reads one reference retained by this room's active Planner session. */
 	readReference?: (id: string, repositoryId: string) => Promise<unknown>;
-	/** Experimental foreground visual handoff; absent from production sessions. */
-	visual?: VisualSession;
-	/** Server-owned assessment of every new foreground Planner passage. */
-	visualAdmission?: VisualAdmission;
 	/** The current turn's cancellation, read per call when a session is retained. */
 	turnSignal?: () => AbortSignal | undefined;
 	/** Hears the ids of the Decision cards this room's Planner creates; set in a Chat thread. */
@@ -451,91 +436,6 @@ export const documentTools = {
 			}),
 	}),
 
-	assess_visual: tool({
-		contextSchema: roomContext,
-		description: "Assess one proposed explanatory paragraph before editing it. Jev decides "
-			+ "whether a visual is possible and helpful, then selects its supported type. "
-			+ "Use the returned visual_route id with edit_plan for this exact paragraph and position.",
-		inputSchema: jsonSchema({
-			type: "object",
-			properties: {
-				revision: { type: "integer", minimum: 0 },
-				operation: {
-					type: "object",
-					properties: {
-						op: { type: "string", enum: ["insert", "insert_root", "replace", "replace_root"] },
-						index: { type: "integer", minimum: 0 },
-						source: { type: "string", maxLength: 100_000 },
-					},
-					required: ["op", "source"],
-					additionalProperties: false,
-				},
-			},
-			required: ["revision", "operation"],
-			additionalProperties: false,
-		}),
-		metadata: { skipPermission: true },
-		execute: (raw, { context: { room: context } }) =>
-			answer("assess_visual", async () => {
-				let [{ visualCandidate }, { assessVisual }, { bindVisualRoute }, catalog] = await Promise
-					.all([
-						import("./visual-handoff"),
-						import("./visual-routing"),
-						import("./visual-receipt"),
-						import("./visual-catalog"),
-					]);
-				let visual = context.visual;
-				if (!visual || context.plan.chat?.job) {
-					throw new Error("visual assessment is unavailable in this session");
-				}
-				let member = context.currentMemberRequest?.();
-				if (!member) throw new Error("visual assessment needs a current member request");
-				let { revision, operation } = Arguments.assessVisual(raw);
-				if (revision !== context.plan.revision) {
-					return { ok: false, reason: "stale-route", revision: context.plan.revision };
-				}
-				let { passage, target } = visualCandidate(operation);
-				let assessment = await assessVisual(
-					{ passages: [{ index: 0, source: passage }], readerQuestion: member.text },
-					request => {
-						if (
-							context.plan.revision !== revision
-							|| !sameMemberRequest(context.currentMemberRequest?.(), member)
-						) throw new Error("visual assessment turn changed");
-						return visual.ask(request);
-					},
-				);
-				if (
-					context.plan.revision !== revision
-					|| !sameMemberRequest(context.currentMemberRequest?.(), member)
-				) return { ok: false, reason: "stale-route", revision: context.plan.revision };
-				if (assessment.failure) {
-					return { ok: false, reason: "assessment-unavailable", failure: assessment.failure };
-				}
-				let route = assessment.routes[0]!;
-				let id = crypto.randomUUID();
-				visual.pending = {
-					id,
-					member: {
-						entryId: member.entryId,
-						turnId: member.turnId,
-						lifecycle: member.lifecycle,
-					},
-					passage,
-					receipt: bindVisualRoute({ revision, passage, target, route }),
-				};
-				return {
-					ok: true,
-					visual_route: id,
-					route,
-					...(route.kind === "diagram" && route.type && {
-						requires: catalog.VISUAL_DESCRIPTIONS[route.type]?.requires,
-						example: catalog.visualExample(route.type),
-					}),
-				};
-			}),
-	}),
-
 	edit_plan: tool({
 		contextSchema: ownerContext,
 		description: "Edit the plan as an atomic batch against the revision you last read. Indices "
@@ -553,12 +453,6 @@ export const documentTools = {
 					description: "The revision returned by the `read_plan` you are editing from.",
 				},
 				operations: EDIT_OPERATIONS_SCHEMA,
-				visual_route: {
-					type: "string",
-					minLength: 1,
-					maxLength: 100,
-					description: "The id returned by assess_visual for this exact explanatory edit.",
-				},
 			},
 			required: ["revision", "operations"],
 			additionalProperties: false,
@@ -569,49 +463,16 @@ export const documentTools = {
 					(signal): signal is AbortSignal => !!signal,
 				);
 				let signal = signals.length ? AbortSignal.any(signals) : undefined;
-				let visual = context.visual
-					? await Promise.all([import("./visual-handoff"), import("./visual-receipt")])
-					: undefined;
 				let document = await documentIdentity(context.plan);
 				let args = Arguments.editPlan(raw);
-				let refusal = await admitBlockEdit(context, args, signal);
-				if (refusal) return { ...refusal, document };
 				let result = await context.exclusive(async () => {
 					if (signal?.aborted) return { ok: false, reason: "cancelled" };
 					if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
-					if (context.visual) {
-						let written = visual![0].visualWrite(args.operations);
-						if (written) {
-							let pending = context.visual.pending;
-							let member = context.currentMemberRequest?.();
-							if (
-								!pending || args.visualRoute !== pending.id
-								|| !sameMemberRequest(member, pending.member)
-							) return { ok: false, reason: "missing-route" };
-							if (args.revision !== context.plan.revision) {
-								return { ok: false, reason: "stale-route", revision: context.plan.revision };
-							}
-							let check = visual![1].checkVisualRoute({
-								required: true,
-								receipt: pending.receipt,
-								revision: args.revision,
-								passage: pending.passage,
-								target: written.target,
-								authored: written.authored,
-							});
-							if (!check.ok) return check;
-						} else if (args.visualRoute) return { ok: false, reason: "wrong-placement" };
-					} else if (args.visualRoute) {
-						return { ok: false, reason: "visual-routing-unavailable" };
-					}
 					let { acting, actingChannel } = context.plan.chat;
 					return applyBlockEdit(context, args, {
 						signal,
 						// A thread in a child is answered by `edit_child`, not by an edit here.
 						acting: actingChannel ? undefined : acting,
-						applied: () => {
-							if (context.visual) context.visual.pending = undefined;
-						},
 					});
 				});
 				return { ...result, document };

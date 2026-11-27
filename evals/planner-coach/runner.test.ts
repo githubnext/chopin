@@ -23,7 +23,6 @@ let settings = {
 	token: "test-token",
 	instructions: "Test tool execution only.",
 	model: "test",
-	visual: "off" as const,
 	limits: { maxTools: 5, turnTimeoutMs: 2_000, questionWaitMs: 100 },
 };
 let edit = {

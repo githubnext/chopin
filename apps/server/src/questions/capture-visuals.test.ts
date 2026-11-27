@@ -143,7 +143,6 @@ test("a later peer card stays after the visual added by a saved-answer continuat
 		exclusive: <T>(action: () => Promise<T>) => Plan.exclusive(context.plan, action),
 		anchors() {},
 		changes() {},
-		visualAdmission: async () => [],
 	} as unknown as import("../agent/tools").DocumentRoom;
 	let snapshot = scopeSnapshot(context.plan, id);
 	await writeScope(room, job, context.plan.chat.turn, {

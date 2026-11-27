@@ -17,12 +17,6 @@ test("failed write, foreground rewrite, explicit re-anchor and Retry commit actu
 		Service.publish(context.plan, context.server, context.plan.id, mutation);
 	let attempts = 0;
 	let repaired = false;
-	room.visualAdmission = async () =>
-		repaired ? [] : [{
-			code: "E_VISUAL_REQUIRED",
-			path: "sources[0]",
-			message: "Include the supported offline comparison.",
-		}];
 	let jobs = createPlannerJobs({
 		plan: context.plan,
 		exclusive: room.exclusive,
@@ -35,7 +29,7 @@ test("failed write, foreground rewrite, explicit re-anchor and Retry commit actu
 				let snapshot = scopeSnapshot(context.plan, id);
 				let written = await writeScope(room, job, context.plan.chat.turn, {
 					id,
-					revision: snapshot.revision,
+					revision: repaired ? snapshot.revision : snapshot.revision + 1,
 					answersHash: snapshot.answersHash,
 					source: "Offline support is required.\n\nThe existing API stays stable.",
 				});

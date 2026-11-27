@@ -55,7 +55,6 @@ export default defineConfig({
 			SERVER_HOST: "127.0.0.1",
 			APP_ORIGIN: origin,
 			AGENT: "on",
-			PLANNER_VISUALS: visualRouting ? "on" : "off",
 			...(visualRouting && {
 				JEV_API_KEY: process.env.JEV_API_KEY!,
 				DECISIONS_MODEL: "typesafe/jev-latest",

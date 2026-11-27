@@ -644,7 +644,6 @@ function buildThreadRoom(
 		room: topContext.room,
 		config: topContext.config,
 		decide: topContext.decide,
-		visualAdmission: topContext.visualAdmission,
 		auth: topContext.auth,
 		claimantSessionId: topContext.claimantSessionId,
 		repository: topContext.repository,

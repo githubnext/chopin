@@ -672,7 +672,7 @@ Only a turn driven by a person's message (in Chat or a thread) may call it:
 that person is the creator, and their live browser login is rechecked for write
 access as for `chat:send`. Turns nobody typed and background jobs are refused.
 
-`create_document` reuses MCP's draft validation, visual assessment, and
+`create_document` reuses MCP's draft validation and
 creation transaction (`createDocument` in `apps/server/src/mcp/hosted.ts`),
 keeping the creating document's repository and base branch with a
 source-scoped idempotency key and no per-turn or hourly cap. The creating

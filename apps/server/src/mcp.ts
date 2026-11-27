@@ -50,7 +50,6 @@ import type { Run, Version } from "./tasks/graphs";
 import type { unapprovedContext } from "./tasks/open-decisions";
 import type { LifecycleArguments } from "./mcp/lifecycle";
 import type { ImplementationLifecycle } from "./tasks/lifecycle";
-import type { Issue } from "@chopin/dialect";
 
 export type { Brief, CreateDocumentInput, CreationOrigin } from "./mcp/create";
 export type { UploadImageInput } from "./mcp/image";
@@ -175,7 +174,6 @@ export type CreateDocument<Caller> = {
 		| { kind: "title-taken" }
 		| { kind: "forbidden" }
 		| { kind: "unavailable" }
-		| { kind: "visuals-required"; issues: Issue[] }
 	>;
 };
 
@@ -666,9 +664,7 @@ export const TOOLS: Tool[] = [
 	},
 	{
 		name: "create_document",
-		description: "Create a Chopin document from a structured brief and canonical plan. New prose "
-			+ "is assessed for useful visuals before saving. If issues name required diagrams or "
-			+ "tables, add them beside their passages and retry; the refused draft was not saved.",
+		description: "Create a Chopin document from a structured brief and canonical plan.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -713,9 +709,7 @@ export const TOOLS: Tool[] = [
 	},
 	{
 		name: "update_document",
-		description: "Replace a Chopin document's canonical plan against the revision last read. "
-			+ "New prose is assessed for useful visuals before saving. Repair any returned visual "
-			+ "issues beside the named passages and retry against the current revision.",
+		description: "Replace a Chopin document's canonical plan against the revision last read.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -1673,9 +1667,6 @@ export function handler<Caller>(
 					}
 					if ("issues" in prepared) return respond(text({ issues: prepared.issues }, true));
 					let outcome = await creation.create(caller, prepared.input);
-					if (outcome.kind === "visuals-required") {
-						return respond(text({ issues: outcome.issues }, true));
-					}
 					if (outcome.kind === "created" || outcome.kind === "replayed") {
 						return respond(text(outcome.document));
 					}
@@ -1702,9 +1693,6 @@ export function handler<Caller>(
 						name: client.name,
 						version: client.version,
 					});
-					if (outcome.kind === "visuals-required") {
-						return respond(text({ issues: outcome.issues }, true));
-					}
 					if (outcome.kind === "updated" || outcome.kind === "replayed") {
 						return respond(text(outcome.document));
 					}

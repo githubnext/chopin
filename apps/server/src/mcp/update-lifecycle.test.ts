@@ -98,41 +98,7 @@ function socket(context: Context) {
 }
 
 describe("hosted document rewrite lifecycle", () => {
-	it("refuses missing visuals before rewriting and never rechecks a durable replay", async () => {
-		let context = await openPlan("# Original\n");
-		let room = attach(context);
-		let issue = { code: "visual-required", path: "sources[0]", message: "Add a sequence diagram." };
-		let blocked = true;
-		let checks = 0;
-		let api = adapter(context, {
-			visualAdmission: async () => {
-				checks++;
-				return blocked ? [issue] : [];
-			},
-		});
-		try {
-			expect(await api.update!.update(caller, input(context), client))
-				.toEqual({ kind: "visuals-required", issues: [issue] });
-			expect((await stored(context)).projected).toMatchObject({
-				source: "# Original\n",
-				revision: 0,
-			});
-			blocked = false;
-			expect(await api.update!.update(caller, input(context), client)).toMatchObject({
-				kind: "updated",
-			});
-			blocked = true;
-			expect(await api.update!.update(caller, input(context), client)).toMatchObject({
-				kind: "replayed",
-			});
-			expect(checks).toBe(2);
-		} finally {
-			Rooms.forget(room);
-			await Plan.close(context.plan);
-		}
-	});
-
-	it("snapshots a closed document under lifecycle serialization and releases it before assessment", async () => {
+	it("rewrites a closed document under lifecycle serialization", async () => {
 		let context = await openPlan("# Original\n");
 		await Plan.close(context.plan);
 		let serialized = false;
@@ -141,7 +107,6 @@ describe("hosted document rewrite lifecycle", () => {
 			if (!serialized) throw new Error("document opened outside lifecycle serialization");
 			return load(id, now);
 		};
-		let before: string | undefined;
 		let api = adapter(context, {
 			serializeDocument: async (_id, action) => {
 				serialized = true;
@@ -151,16 +116,10 @@ describe("hosted document rewrite lifecycle", () => {
 					serialized = false;
 				}
 			},
-			visualAdmission: async input => {
-				if (serialized) throw new Error("classifier held lifecycle serialization");
-				before = input.before;
-				return [];
-			},
 		});
 		try {
 			expect(await api.update!.update(caller, input(context), client))
 				.toMatchObject({ kind: "updated", document: { revision: 1 } });
-			expect(before).toBe("# Original\n");
 		} finally {
 			context.storage.collaboration.load = load;
 		}
@@ -168,7 +127,7 @@ describe("hosted document rewrite lifecycle", () => {
 	});
 
 	for (let state of ["archived", "locked", "stale"] as const) {
-		it(`keeps a ${state} preflight terminal when the lifecycle lock releases`, async () => {
+		it(`refuses a ${state} document without rewriting it`, async () => {
 			let context = await openPlan("# Original\n");
 			let room = attach(context);
 			if (state === "archived") {
@@ -179,23 +138,7 @@ describe("hosted document rewrite lifecycle", () => {
 				});
 			} else if (state === "locked") context.plan.claiming = true;
 			else context.plan.revision = 1;
-			let checks = 0;
-			let transitions = 0;
-			let api = adapter(context, {
-				visualAdmission: async () => {
-					checks++;
-					return [];
-				},
-				serializeDocument: async (_id, action) => {
-					let result = await action();
-					if (++transitions === 1) {
-						if (state === "archived") {
-							await context.storage.channels.restore({ id: context.channel.id, now: new Date() });
-						} else if (state === "locked") context.plan.claiming = false;
-					}
-					return result;
-				},
-			});
+			let api = adapter(context);
 			try {
 				expect(await api.update!.update(caller, input(context), client)).toEqual(
 					state === "stale"
@@ -203,7 +146,6 @@ describe("hosted document rewrite lifecycle", () => {
 						: { kind: state },
 				);
 				expect(Plan.source(context.plan)).toBe("# Original\n");
-				expect(checks).toBe(0);
 			} finally {
 				context.plan.claiming = false;
 				if (state === "archived") {
@@ -241,42 +183,6 @@ describe("hosted document rewrite lifecycle", () => {
 			document: { source: "# Changed\n", revision: 1 },
 		});
 		expect((await stored(context)).projected).toMatchObject({ source: "# Changed\n", revision: 1 });
-	});
-
-	it("visual assessment leaves the room editable and refuses a stale imported replacement", async () => {
-		let context = await openPlan("# Original\n");
-		let room = attach(context);
-		let entered = latch(), release = latch();
-		let api = adapter(context, {
-			visualAdmission: async ({ before }) => {
-				expect(before).toBe("# Original\n");
-				entered.release();
-				await release.promise;
-				return [];
-			},
-		});
-		let updating = api.update!.update(caller, input(context), client);
-		try {
-			await entered.promise;
-			await Plan.exclusive(context.plan, async () => {
-				let change = edit.apply(context.plan, 0, [{
-					op: "replace_root",
-					source: "# Collaborator\n",
-				}]);
-				if (!change.ok) throw new Error("Collaborator edit failed");
-				if (change.mutation) {
-					await Plan.publish(context.plan, context.server, room.id, change.mutation);
-				}
-			});
-			release.release();
-			expect(await updating).toEqual({ kind: "revision-conflict", revision: 1 });
-			expect(Plan.source(context.plan)).toBe("# Collaborator\n");
-		} finally {
-			release.release();
-			await updating;
-			Rooms.forget(room);
-			await Plan.close(context.plan);
-		}
 	});
 
 	/** Stored before the newer URL rules: an update must keep it, not be refused for it. */

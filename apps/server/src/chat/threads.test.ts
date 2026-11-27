@@ -1278,7 +1278,7 @@ describe("Chat threads server", () => {
 		});
 		cleanups.push(() => adapter.shutdown());
 		let agent = createPlannerAgent(adapter);
-		let threadAgent = createPlannerAgent(adapter, undefined, false, true);
+		let threadAgent = createPlannerAgent(adapter, undefined, true);
 
 		let w = await buildWorld({
 			HARNESS: "atomic",

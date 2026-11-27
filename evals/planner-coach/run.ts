@@ -72,11 +72,9 @@ async function main() {
 		provider: "GitHub Copilot",
 		conversation:
 			"Bounded prior human/Planner Chat text replayed per disposable turn (100 entries, 50000 characters)",
-		visual: settings.visual,
 		flags: Object.fromEntries(
 			[
 				"CONVERSATION_PLAN",
-				"PLANNER_VISUALS",
 				"LIVE_BUILD",
 				"LIVE_SPIKES",
 				"LIVE_SPIKES_REGEX_JUDGE",
@@ -119,7 +117,6 @@ async function main() {
 					token,
 					instructions,
 					model: settings.model,
-					visual: settings.visual,
 					limits: settings,
 				});
 				transcripts.push(transcript);

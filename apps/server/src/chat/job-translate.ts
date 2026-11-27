@@ -83,7 +83,6 @@ function cause(content: unknown): string | undefined {
 		return "another answer to it changed while it was being written";
 	}
 	if (/orphaned|ambiguous/.test(text)) return "the passage it rewrites was removed or changed";
-	if (/visuals-required/.test(text)) return "the passage needs a diagram or table it did not add";
 	if (/\bstale\b/.test(text)) return "the document changed while it was being written";
 	if (/implementation is active/.test(text)) return "a build is running";
 }

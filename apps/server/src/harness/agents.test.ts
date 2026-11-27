@@ -561,7 +561,7 @@ it("only a thread's agent offers tell_chat_planner, which sends through the thre
 		}
 	};
 	await run(createPlannerAgent(fake));
-	await run(createPlannerAgent(fake, undefined, false, true));
+	await run(createPlannerAgent(fake, undefined, true));
 	expect(offered[0]).toEqual(PLANNER_TOOL_NAMES);
 	expect(offered[1]).toEqual([...PLANNER_TOOL_NAMES, THREAD_NOTE_TOOL_NAME]);
 	expect(sent).toEqual([{ decision: "Keep PostgreSQL.", question: "q-db" }]);

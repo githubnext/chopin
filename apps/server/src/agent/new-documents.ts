@@ -173,8 +173,6 @@ const REFUSALS: Record<string, string> = {
 	"title-taken": "The repository already has a document with this title. Choose another title.",
 	"invalid-document": "The document is not valid in the dialect. Fix the issues and retry with "
 		+ "the same idempotencyKey.",
-	"visuals-required": "Add the required diagrams or tables beside the named passages and retry "
-		+ "with the same idempotencyKey; nothing was saved.",
 	unavailable: "The document could not be created now. Retry with the same idempotencyKey.",
 };
 
@@ -241,11 +239,6 @@ export async function createNewDocument(
 		{
 			user: login.user,
 			repository,
-			stillWrites: async () => {
-				let current = await deps.login(creator.userId, creator.claimantSessionId);
-				return !!current
-					&& writes(await deps.repository(current, owner, name), source.repositoryId);
-			},
 			modelChoice: () => deps.modelChoice(sourceId, creator.userId),
 			createdFrom: sourceId,
 			...(request.signal ? { signal: request.signal } : {}),
@@ -257,7 +250,6 @@ export async function createNewDocument(
 	if (outcome.kind === "title-taken") return refused("title-taken");
 	if (outcome.kind === "forbidden") return refused("repository-forbidden");
 	if (outcome.kind === "unavailable") return refused("unavailable");
-	if (outcome.kind === "visuals-required") return refused("visuals-required", outcome.issues);
 	let { channel } = outcome;
 	let path = outcome.document.url;
 	let url = new URL(path, deps.appOrigin).href;

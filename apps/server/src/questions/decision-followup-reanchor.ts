@@ -1,5 +1,5 @@
 import { parse } from "@chopin/dialect";
-import { SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
+import { MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
 import * as Room from "../plan/room";
 import type { Plan } from "../plan/service";
 import type { Placement } from "./service-relationships";
@@ -35,7 +35,9 @@ export function reanchorScopes(plan: Plan, updates: Placement[]): string[] {
 					let block = blocks[index]!;
 					if (block.type === "mdxJsxFlowElement" && block.name === "Questionnaire") continue;
 					if (
-						block.type !== "table" && !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
+						block.type !== "table"
+						&& !(block.type === "code"
+							&& (block.lang === SEECODE_LANGUAGE || block.lang === MERMAID_LANGUAGE))
 					) break;
 					indices.add(index);
 				}
@@ -47,7 +49,8 @@ export function reanchorScopes(plan: Plan, updates: Placement[]): string[] {
 				if (block.type === "mdxJsxFlowElement" && block.name === "Questionnaire") continue;
 				if (
 					!indices.has(index) || block.type !== "paragraph" && block.type !== "table"
-						&& !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
+						&& !(block.type === "code"
+							&& (block.lang === SEECODE_LANGUAGE || block.lang === MERMAID_LANGUAGE))
 				) return;
 			}
 			return ordered;

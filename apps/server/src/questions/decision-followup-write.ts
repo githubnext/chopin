@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { parse } from "@chopin/dialect";
-import { SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
+import { MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
 import * as Comments from "../comments/service";
 import * as Edit from "../plan/edit";
 import * as Room from "../plan/room";
@@ -37,10 +37,10 @@ export async function writeScope(
 		if (Service.implementationActive(plan)) throw new Error("implementation is active");
 		return record;
 	};
-	let preflight = await context.exclusive(async () => {
+	return context.exclusive(async () => {
 		let record = active();
 		if (record.followUp!.appliedGeneration === decisionGeneration(record)) {
-			return { replay: true as const };
+			return { output: { id: args.id, replayed: true }, revision: plan.revision };
 		}
 		let snapshot = scopeSnapshot(plan, args.id);
 		if (snapshot.answersHash !== args.answersHash) {
@@ -65,56 +65,21 @@ export async function writeScope(
 			!blocks.length || blocks.length > 8 || blocks[0]!.type !== "paragraph"
 			|| blocks.slice(1).some(block =>
 				block.type !== "paragraph" && block.type !== "table"
-				&& !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
+				&& !(block.type === "code"
+					&& (block.lang === SEECODE_LANGUAGE || block.lang === MERMAID_LANGUAGE))
 			)
 		) {
-			throw new Error("write at most eight ordinary paragraphs, native diagrams or tables");
-		}
-		let operations: Edit.Operation[] = [
-			{ op: "replace", index: snapshot.indices[0]!, source: args.source },
-			...snapshot.indices.slice(1).map(index => ({ op: "delete" as const, index })),
-		];
-		let prepared = Edit.prepare(plan, plan.revision, operations);
-		if (!prepared.ok) {
-			throw new Error(prepared.reason === "invalid" ? prepared.message : "stale scope");
-		}
-		return {
-			replay: false as const,
-			snapshot,
-			before: Edit.source(plan),
-			source: prepared.source,
-			count: blocks.length,
-		};
-	});
-	if (preflight.replay) return { output: { id: args.id, replayed: true }, revision: plan.revision };
-	if (!context.visualAdmission) throw new Error("visual assessment is unavailable");
-	let issues = await context.visualAdmission({
-		before: preflight.before,
-		sources: [preflight.source],
-		signal,
-	});
-	if (issues.length) throw new Error(`visuals-required: ${JSON.stringify(issues)}`);
-	return context.exclusive(async () => {
-		let record = active();
-		if (record.followUp!.appliedGeneration === decisionGeneration(record)) {
-			return { output: { id: args.id, replayed: true }, revision: plan.revision };
-		}
-		let snapshot = scopeSnapshot(plan, args.id);
-		// An unrelated edit can advance the document while assessment runs. Only reuse the
-		// assessment when the complete passage and saved answers are still the ones assessed.
-		if (
-			snapshot.scope !== preflight.snapshot.scope
-			|| snapshot.source !== preflight.snapshot.source
-			|| snapshot.context !== preflight.snapshot.context
-			|| snapshot.answersHash !== args.answersHash
-		) {
-			throw new Error("stale; read_decision_scope again");
+			throw new Error("write at most eight ordinary paragraphs, diagrams or tables");
 		}
 		let revision = plan.revision;
 		let operations: Edit.Operation[] = [
 			{ op: "replace", index: snapshot.indices[0]!, source: args.source },
 			...snapshot.indices.slice(1).map(index => ({ op: "delete" as const, index })),
 		];
+		let prepared = Edit.prepare(plan, revision, operations);
+		if (!prepared.ok) {
+			throw new Error(prepared.reason === "invalid" ? prepared.message : "stale scope");
+		}
 		let source = Room.project(plan.document);
 		let candidate: Service.Plan = {
 			...plan,
@@ -138,7 +103,7 @@ export async function writeScope(
 			Relationships.rebase(candidate, source);
 			Comments.rebase(candidate);
 			let indices = Array.from(
-				{ length: preflight.count },
+				{ length: blocks.length },
 				(_, index) => snapshot.indices[0]! + index,
 			);
 			let digests = Room.digests(staged);

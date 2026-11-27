@@ -3,7 +3,6 @@ import {
 	PLANNER_TOOL_NAMES,
 	REACTION_TOOL_NAMES,
 	THREAD_NOTE_TOOL_NAME,
-	VISUAL_PLANNER_TOOL_NAMES,
 } from "./tool-names";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import {
@@ -14,8 +13,6 @@ import {
 	reactionPlannerAgent,
 	refinePlannerAgent,
 	threadPlannerAgent,
-	threadVisualPlannerAgent,
-	visualPlannerAgent,
 } from "./agents";
 import { githubTools, type GitHubToolsError, lazyGithubTools, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
@@ -159,10 +156,8 @@ export type PlannerSessionDependencies = {
 	proseAgent?: PlannerAgent;
 	followupAgent?: PlannerAgent;
 	reactionAgent?: PlannerAgent;
-	visualAgent?: PlannerAgent;
 	/** A thread's full Atomic Planner, which is offered `tell_chat_planner`. */
 	threadAgent?: PlannerAgent;
-	threadVisualAgent?: PlannerAgent;
 	githubTools?: typeof githubTools;
 	createSandbox?: () => Promise<Sandbox>;
 	registerCredential?: typeof registerCredential;
@@ -269,23 +264,19 @@ export async function openPlannerSession(
 			unregisterRemote = registerRemotePlanner(sessionId, held);
 		}
 		let noting = !!channel.tellChat && !!planner;
-		let agent = deps.agent ?? (job?.kind === "heading"
-			? deps.headingAgent ?? headingPlannerAgent
+		let agent = job?.kind === "heading"
+			? deps.headingAgent ?? deps.agent ?? headingPlannerAgent
 			: job?.kind === "refine" || job?.kind === "suggest"
-			? deps.refineAgent ?? refinePlannerAgent
+			? deps.refineAgent ?? deps.agent ?? refinePlannerAgent
 			: job?.kind === "prose"
-			? deps.proseAgent ?? prosePlannerAgent
+			? deps.proseAgent ?? deps.agent ?? prosePlannerAgent
 			: job?.kind === "decision-followup"
-			? deps.followupAgent ?? decisionFollowupPlannerAgent
+			? deps.followupAgent ?? deps.agent ?? decisionFollowupPlannerAgent
 			: channel.reader
-			? deps.reactionAgent ?? reactionPlannerAgent
-			: noting && channel.room.visual
-			? deps.threadVisualAgent ?? threadVisualPlannerAgent
+			? deps.reactionAgent ?? deps.agent ?? reactionPlannerAgent
 			: noting
-			? deps.threadAgent ?? threadPlannerAgent
-			: channel.room.visual
-			? deps.visualAgent ?? visualPlannerAgent
-			: plannerAgent);
+			? deps.threadAgent ?? deps.agent ?? threadPlannerAgent
+			: deps.agent ?? plannerAgent;
 		let opening = agent.createSession({ sessionId, sandboxSession: sandbox });
 		let deadline = new Promise<never>((_, reject) => {
 			timeout = setTimeout(
@@ -316,8 +307,6 @@ export async function openPlannerSession(
 				? BACKGROUND_TOOL_NAMES[job.kind]
 				: channel.reader
 				? REACTION_TOOL_NAMES
-				: channel.room.visual
-				? VISUAL_PLANNER_TOOL_NAMES
 				: PLANNER_TOOL_NAMES),
 			...(noting ? [THREAD_NOTE_TOOL_NAME] : []),
 		]);
