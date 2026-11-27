@@ -68,7 +68,7 @@ function installing(version: string): AdapterInstaller {
 }
 
 const fakeInstall: AdapterInstaller = async root => {
-	await installing("0.10.11")(root);
+	await installing("0.10.12")(root);
 	mkdirSync(join(root, "node_modules", "pg"), { recursive: true });
 	writeFileSync(join(root, "node_modules", "pg", "package.json"), "{}");
 };
@@ -150,7 +150,7 @@ describe("a machine's database login on the connector", () => {
 		let manifest = join(root, "node_modules", ...MACHINE_STORE_ADAPTER.split("/"), "package.json");
 		let version = () => JSON.parse(readFileSync(manifest, "utf8")).version;
 		// What an earlier connector installed for agents on an earlier Atomic.
-		await installing("0.10.10")(root);
+		await installing("0.10.11")(root);
 		writeFileSync(join(root, "stale.txt"), "left by the earlier install");
 		// An install that leaves no release in range is refused and leaves the cache as it was.
 		await expect(storeAdapter(directory, installing("0.11.0"))).rejects.toThrow(
@@ -159,15 +159,15 @@ describe("a machine's database login on the connector", () => {
 		await expect(storeAdapter(directory, async () => {
 			throw new Error("npm install failed: network");
 		})).rejects.toThrow("network");
-		expect(version()).toBe("0.10.10");
-		expect(await storeAdapter(directory, installing("0.10.11"))).toBe(root);
 		expect(version()).toBe("0.10.11");
+		expect(await storeAdapter(directory, installing("0.10.12"))).toBe(root);
+		expect(version()).toBe("0.10.12");
 		expect(existsSync(join(root, "stale.txt"))).toBe(false);
 		let installs = 0;
 		expect(
 			await storeAdapter(directory, async staging => {
 				installs++;
-				await installing("0.10.12")(staging);
+				await installing("0.10.13")(staging);
 			}),
 		).toBe(root);
 		expect(installs).toBe(0);

@@ -134,7 +134,7 @@ Pass `--agent` with one of these built-in coding agents:
 | Agent                                                                                               | In its microVMs                                         | Connect with      | Tested with Chopin |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------- | ------------------ |
 | [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `@github/copilot@1.0.114`                               | `--agent copilot` | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `@bastani/atomic@0.10.11`, `@bastani/atomic-acp@0.0.18` | `--agent atomic`  | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `@bastani/atomic@0.10.12`, `@bastani/atomic-acp@0.0.18` | `--agent atomic`  | Yes                |
 
 For any other agent that speaks ACP, pass its command after `--`, such as `chopin connect -- my-agent --acp`.
 
