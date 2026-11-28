@@ -95,7 +95,7 @@ proxy that the server learns some other way, such as a system setting, set
 these variables on the server process too: otherwise the CLI connects directly,
 and a Planner turn fails with "The Planner stream failed."
 
-`HARNESS=atomic` runs Atomic 0.10.15 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.10.16 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
 
